@@ -49,6 +49,7 @@ export function createEventSubClient({
   let startSettled = false;
   let startResolve;
   let startReject;
+  const recoveryInFlight = new Set();
 
   function settleStart(error, value) {
     if (startSettled) return;
@@ -247,19 +248,22 @@ export function createEventSubClient({
             status: subscription?.status
           });
           onRevocation(subscription, message);
-          if (socket === activeSocket && subscription?.type && activeSessionId) {
+          if (socket === activeSocket && subscription?.type && activeSessionId
+            && !recoveryInFlight.has(subscription.type)) {
             const replacement = buildEventSubSubscriptions({
               broadcasterUserId: config.broadcasterUserId,
               botUserId: config.botUserId ?? config.broadcasterUserId,
               sessionId: activeSessionId
             }).find((candidate) => candidate.type === subscription.type);
             if (replacement) {
+              recoveryInFlight.add(subscription.type);
               registerSubscription(replacement).catch((error) => {
                 logger.error('EventSub revoked subscription recovery failed', {
                   type: subscription.type,
+                  status: subscription.status,
                   message: error.message
                 });
-              });
+              }).finally(() => recoveryInFlight.delete(subscription.type));
             }
           }
         }
