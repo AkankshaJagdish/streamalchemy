@@ -114,9 +114,10 @@ describe('overlay server', () => {
       event: OVERLAY_EVENTS.CURSE_EXPIRED,
       payload: { id: 'gravity', expiredAt: 31000, state: 'idle' }
     });
-    expect(server.io.emitted.at(-1)).toEqual({
+    expect(server.io.emitted).toContainEqual({
       event: OVERLAY_EVENTS.CURSE_STATE, payload: { state: 'idle', effect: null }
     });
+    expect(server.io.emitted.filter((entry) => entry.event === OVERLAY_EVENTS.CURSE_STATE)).toHaveLength(2);
   });
 
   it('restores state after overlay reconnection without resetting timestamps', () => {
