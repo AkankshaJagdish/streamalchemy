@@ -133,9 +133,10 @@ describe('StreamAlchemy mocked full integration flows', () => {
       event: OVERLAY_EVENTS.CURSE_EXPIRED,
       payload: { id: 'gravity', expiredAt: 31_000, state: 'idle' }
     });
-    expect(io.emitted.at(-1)).toEqual({
+    expect(io.emitted).toContainEqual({
       event: OVERLAY_EVENTS.CURSE_STATE, payload: { state: 'idle', effect: null }
     });
+    expect(io.emitted.filter((entry) => entry.event === OVERLAY_EVENTS.CURSE_STATE)).toHaveLength(3);
   });
 
   it('Channel Points → EventSub → reward-ID handler → same Curse Engine → overlay → expiration', async () => {
