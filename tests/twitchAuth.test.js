@@ -83,7 +83,7 @@ describe('validateConfiguredTwitchAuth', () => {
         broadcasterLogin: 'broadcaster',
         botUserId: '200'
       }
-    })).rejects.toThrow(/must equal/);
+    })).rejects.toThrow(/TWITCH_BOT_USER_ID to equal TWITCH_BROADCASTER_USER_ID/);
   });
 
   it('validates broadcaster token with minimum Stage 1 scopes', async () => {
