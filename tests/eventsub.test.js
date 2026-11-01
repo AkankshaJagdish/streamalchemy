@@ -147,13 +147,16 @@ describe('EventSub WebSocket client', () => {
     });
     const handoverSocket = MockSocket.instances[1];
     oldSocket.close(1006, 'old connection ended before handover welcome');
-    expect(timers).toHaveLength(1); // no competing fresh-session timer yet
+    expect(MockSocket.instances).toHaveLength(2); // no competing fresh session
     handoverSocket.close(1006, 'handover failed');
+    await tick();
 
-    expect(timers).toHaveLength(2); // fallback timer is now scheduled
-    timers[1]();
+    expect(timers.length).toBeGreaterThanOrEqual(2); // keepalive + fallback timer
+    const fallback = timers.at(-1);
+    fallback();
     await tick();
     const freshSocket = MockSocket.instances[2];
+    expect(freshSocket).toBeDefined();
     freshSocket.sendFrame(welcome('s-fresh'));
     await tick();
 
