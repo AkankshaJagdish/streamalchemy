@@ -94,7 +94,8 @@ export function createEventSubClient({
   }
 
   function scheduleFreshConnection() {
-    if (stopped || reconnectTimer) return;
+    // A Twitch-directed handover owns reconnection until it succeeds or fails.
+    if (stopped || reconnectTimer || handoverSocket) return;
     reconnectTimer = setTimer(() => {
       reconnectTimer = null;
       connect(DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
@@ -198,6 +199,9 @@ export function createEventSubClient({
               handoverSocket.close();
             }
             handoverSocket = null;
+            if (!activeSocket || activeSocket.readyState >= WebSocketImpl.CLOSING) {
+              scheduleFreshConnection();
+            }
           });
           return;
         }
@@ -235,7 +239,13 @@ export function createEventSubClient({
         if (socket === activeSocket && !stopped) {
           activeSessionId = null;
           keepaliveTimeoutSeconds = null;
-          scheduleFreshConnection();
+          if (!handoverSocket) scheduleFreshConnection();
+        }
+        if (socket === handoverSocket) {
+          handoverSocket = null;
+          if (!stopped && (!activeSocket || activeSocket.readyState >= WebSocketImpl.CLOSING)) {
+            scheduleFreshConnection();
+          }
         }
         if (!welcomed) {
           const error = new Error(`EventSub socket closed before welcome (code ${code})`);
