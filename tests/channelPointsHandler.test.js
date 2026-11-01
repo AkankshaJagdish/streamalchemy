@@ -68,7 +68,7 @@ describe('Channel Points handler', () => {
     await expect(handler({ payload: {} })).resolves.toMatchObject({
       handled: false, reason: 'malformed-notification'
     });
-    await expect(handler(envelope({ reward: { id: REWARD_ID } }))).resolves.toMatchObject({
+    await expect(handler(envelope({ reward: { title: 'Gravity Curse' } }))).resolves.toMatchObject({
       handled: false, reason: 'malformed-redemption'
     });
     expect(activateCurse).not.toHaveBeenCalled();
