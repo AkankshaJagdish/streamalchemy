@@ -20,12 +20,6 @@ export function parseEventSubMessage(raw) {
   return message;
 }
 
-/**
- * Maintains one active EventSub socket and, only during an official reconnect
- * handover, one temporary replacement socket. Fresh sessions register both
- * subscriptions after Welcome. Reconnect handovers inherit subscriptions and
- * therefore must not create duplicates.
- */
 export function createEventSubClient({
   config,
   fetchImpl = fetch,
@@ -49,6 +43,7 @@ export function createEventSubClient({
   let activeSessionId = null;
   let keepaliveTimer = null;
   let reconnectTimer = null;
+  let keepaliveTimeoutSeconds = null;
   let stopped = false;
   let startPromise = null;
   let startSettled = false;
@@ -80,23 +75,22 @@ export function createEventSubClient({
       sessionId
     });
 
-    // Perform two requests immediately after Welcome; the default subscription
-    // deadline is 10 seconds. Sequential execution avoids concurrent 409 races.
-    for (const subscription of subscriptions) {
-      try {
-        await createEventSubSubscription({
-          clientId: config.clientId,
-          accessToken: config.accessToken,
-          subscription,
-          fetchImpl
-        });
-        logger.info('EventSub subscription registered', { type: subscription.type });
-      } catch (error) {
-        // A 409 is handled as an idempotent duplicate by api.js. Any other
-        // failure must abort startup: a partially subscribed client is not ready.
-        throw error;
-      }
-    }
+    // Twitch's default deadline is 10 seconds after Welcome. Send requests
+    // concurrently so both registration attempts begin immediately.
+    const results = await Promise.all(subscriptions.map((subscription) =>
+      createEventSubSubscription({
+        clientId: config.clientId,
+        accessToken: config.accessToken,
+        subscription,
+        fetchImpl
+      })
+    ));
+    results.forEach((result, index) => {
+      logger.info('EventSub subscription registered', {
+        type: subscriptions[index].type,
+        created: result.created
+      });
+    });
   }
 
   function scheduleFreshConnection() {
@@ -110,18 +104,18 @@ export function createEventSubClient({
     }, reconnectDelayMs);
   }
 
-  function finishHandover(newSocket, newSessionId) {
+  function finishHandover(newSocket, session) {
     const oldSocket = activeSocket;
     activeSocket = newSocket;
-    activeSessionId = newSessionId;
+    activeSessionId = session.id;
+    keepaliveTimeoutSeconds = session.keepalive_timeout_seconds;
     handoverSocket = null;
+    resetKeepalive(keepaliveTimeoutSeconds, newSocket);
 
-    // Existing subscriptions move with the Twitch reconnect URL. Do not create
-    // them again on the replacement session.
     if (oldSocket && oldSocket !== newSocket && oldSocket.readyState < WebSocketImpl.CLOSING) {
       oldSocket.close(1000, 'EventSub reconnect handover complete');
     }
-    onStatus({ state: 'connected', sessionId: newSessionId });
+    onStatus({ state: 'connected', sessionId: session.id });
   }
 
   function connect(url, { handover = false } = {}) {
@@ -154,18 +148,20 @@ export function createEventSubClient({
           if (!session?.id) {
             const error = new Error('EventSub welcome did not include a session ID');
             reject(error);
-            settleStart(error);
+            if (!handover) settleStart(error);
             return;
           }
           welcomed = true;
 
           try {
             if (handover) {
-              // Do not disturb the old connection until replacement Welcome.
-              finishHandover(socket, session.id);
+              // The replacement session inherits old subscriptions; don't
+              // resubscribe. Keep old socket open until this Welcome arrives.
+              finishHandover(socket, session);
             } else {
               activeSessionId = session.id;
-              resetKeepalive(session.keepalive_timeout_seconds, socket);
+              keepaliveTimeoutSeconds = session.keepalive_timeout_seconds;
+              resetKeepalive(keepaliveTimeoutSeconds, socket);
               await registerSubscriptions(session.id);
             }
             onStatus({ state: 'welcomed', sessionId: session.id, handover });
@@ -174,16 +170,14 @@ export function createEventSubClient({
           } catch (error) {
             logger.error('EventSub subscription registration failed', { message: error.message });
             reject(error);
-            settleStart(error);
+            if (!handover) settleStart(error);
             socket.close(1011, 'Subscription registration failed');
           }
           return;
         }
 
         if (messageType === 'session_keepalive') {
-          if (socket === activeSocket) {
-            resetKeepalive(config.keepaliveTimeoutSeconds ?? 30, socket);
-          }
+          if (socket === activeSocket) resetKeepalive(keepaliveTimeoutSeconds, socket);
           onStatus({ state: 'keepalive' });
           return;
         }
@@ -194,16 +188,13 @@ export function createEventSubClient({
             logger.error('EventSub reconnect message contained an invalid URL');
             return;
           }
-
           if (handoverSocket) {
             logger.warn('EventSub reconnect handover already in progress');
             return;
           }
-          // URL must be used verbatim. The old socket remains active until the
-          // replacement emits Welcome. Twitch carries the subscriptions over.
           connect(reconnectUrl, { handover: true }).catch((error) => {
             logger.error('EventSub handover failed', { message: error.message });
-            if (handoverSocket?.readyState < WebSocketImpl.CLOSING) {
+            if (handoverSocket && handoverSocket.readyState < WebSocketImpl.CLOSING) {
               handoverSocket.close();
             }
             handoverSocket = null;
@@ -212,9 +203,7 @@ export function createEventSubClient({
         }
 
         if (messageType === 'notification') {
-          if (socket === activeSocket) {
-            resetKeepalive(config.keepaliveTimeoutSeconds ?? 30, socket);
-          }
+          if (socket === activeSocket) resetKeepalive(keepaliveTimeoutSeconds, socket);
           onNotification(message);
           const type = message.metadata.subscription_type ?? message.payload?.subscription?.type;
           try {
@@ -242,12 +231,10 @@ export function createEventSubClient({
           keepaliveTimer = null;
         }
         onStatus({ state: 'closed', code, reason: reason?.toString?.() ?? '' });
-
         if (socket === handoverSocket) handoverSocket = null;
         if (socket === activeSocket && !stopped) {
           activeSessionId = null;
-          // A transport loss is not a reconnect handover. Fresh Welcome means
-          // Twitch no longer has active subscriptions, so register them anew.
+          keepaliveTimeoutSeconds = null;
           scheduleFreshConnection();
         }
         if (!welcomed) {

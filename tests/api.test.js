@@ -14,10 +14,7 @@ describe('createEventSubSubscription', () => {
       ok: true, status: 202, json: async () => ({ data: [{ id: 'sub-1' }] })
     });
     await expect(createEventSubSubscription({
-      clientId: 'client',
-      accessToken: 'token',
-      subscription,
-      fetchImpl
+      clientId: 'client', accessToken: 'token', subscription, fetchImpl
     })).resolves.toMatchObject({ created: true, data: { id: 'sub-1' } });
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://api.twitch.tv/helix/eventsub/subscriptions',
@@ -32,22 +29,18 @@ describe('createEventSubSubscription', () => {
     );
   });
 
-  it('treats only an exact matching 409 as an existing duplicate', async () => {
+  it('surfaces a documented 409 conflict instead of assuming an unverified duplicate', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({ data: [{ ...subscription, id: 'existing' }] })
+      ok: false, status: 409, json: async () => ({ status: 409, message: 'already exists', id: 'sub-existing' })
     });
     await expect(createEventSubSubscription({
       clientId: 'client', accessToken: 'token', subscription, fetchImpl
-    })).resolves.toMatchObject({ duplicate: true });
+    })).rejects.toMatchObject({ status: 409 });
   });
 
-  it('does not silently accept a mismatched 409 response', async () => {
+  it('surfaces other Twitch API errors', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({ data: [{ ...subscription, condition: { broadcaster_user_id: 'different' } }] })
+      ok: false, status: 403, json: async () => ({ message: 'missing scope' })
     });
     await expect(createEventSubSubscription({
       clientId: 'client', accessToken: 'token', subscription, fetchImpl

@@ -4,16 +4,8 @@ import { createEventSubClient } from './eventsub.js';
 import { createChatHandler } from './chatHandler.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 
-/**
- * Startup boundary for Stage 1 + Stage 2:
- * 1) parse required environment,
- * 2) validate broadcaster User Access Token and scopes,
- * 3) connect EventSub and register subscriptions,
- * 4) route only chat-message notifications to Stage 2's parser adapter.
- *
- * The activation callback is deliberately injected; Stage 3 will supply the
- * Curse Engine. This module does not implement curse activation itself.
- */
+const TOKEN_REVALIDATION_INTERVAL_MS = 60 * 60 * 1000;
+
 export async function startTwitchIntegration({
   env = process.env,
   fetchImpl = fetch,
@@ -22,7 +14,10 @@ export async function startTwitchIntegration({
   onRedemption = async () => {},
   onRevocation = () => {},
   onStatus = () => {},
-  logger = defaultLogger
+  logger = defaultLogger,
+  setIntervalImpl = setInterval,
+  clearIntervalImpl = clearInterval,
+  revalidationIntervalMs = TOKEN_REVALIDATION_INTERVAL_MS
 } = {}) {
   const { twitch: config } = loadConfig(env);
   const auth = await validateConfiguredTwitchAuth({ config, fetchImpl });
@@ -49,16 +44,39 @@ export async function startTwitchIntegration({
     logger
   });
 
+  let validationTimer = null;
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (validationTimer) clearIntervalImpl(validationTimer);
+    eventSub.stop();
+  };
+
   try {
     const session = await eventSub.start();
+
+    // Twitch requires OAuth sessions to be validated at startup and hourly.
+    validationTimer = setIntervalImpl(async () => {
+      try {
+        await validateConfiguredTwitchAuth({ config, fetchImpl });
+        logger.info('Twitch access token hourly validation succeeded');
+      } catch (error) {
+        logger.error('Twitch access token is no longer valid; stopping EventSub', {
+          message: error.message
+        });
+        stop();
+      }
+    }, revalidationIntervalMs);
+
     return Object.freeze({
       auth,
       sessionId: session.sessionId,
-      stop: () => eventSub.stop(),
+      stop,
       eventSub
     });
   } catch (error) {
-    eventSub.stop();
+    stop();
     throw error;
   }
 }
