@@ -133,7 +133,7 @@ describe('createChatHandler', () => {
     });
     expect(await handle({ metadata: { message_type: 'notification', subscription_type: 'channel.chat.message' }, payload: { event: {} } })).toEqual({
       handled: false,
-      reason: 'invalid-notification'
+      reason: 'missing-message-id'
     });
   });
 
