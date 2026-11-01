@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:overlay": "vitest run tests/overlayBrowser.test.js tests/overlayServer.test.js"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -17,7 +18,5 @@
   "devDependencies": {
     "vitest": "^3.2.4"
   },
-  "engines": {
-    "node": ">=22"
-  }
+  "engines": { "node": ">=22" }
 }

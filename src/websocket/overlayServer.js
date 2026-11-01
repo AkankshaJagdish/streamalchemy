@@ -4,68 +4,47 @@ import express from 'express';
 import { OVERLAY_EVENTS, createActivationPayload, createExpirationPayload, createStatePayload } from './overlayEvents.js';
 
 const DEFAULT_ALLOWED_ORIGINS = Object.freeze([
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173'
+  'http://localhost:3000', 'http://127.0.0.1:3000',
+  'http://localhost:5173', 'http://127.0.0.1:5173'
 ]);
-
 function normalizeOrigins(origins) {
   if (Array.isArray(origins)) return origins;
-  if (typeof origins === 'string' && origins.trim()) {
-    return origins.split(',').map((origin) => origin.trim()).filter(Boolean);
-  }
+  if (typeof origins === 'string' && origins.trim()) return origins.split(',').map((origin) => origin.trim()).filter(Boolean);
   return [...DEFAULT_ALLOWED_ORIGINS];
 }
 
-/**
- * Creates the OBS overlay transport.
- * The overlay protocol is server-to-client only: inbound client messages are
- * ignored and can never invoke Curse Engine activation.
- */
 export function createOverlayServer({
-  engine,
-  app = express(),
-  httpServer = createServer(app),
+  engine, app = express(), httpServer = createServer(app),
   allowedOrigins = process.env.OVERLAY_ALLOWED_ORIGINS,
-  SocketIOServerImpl = SocketIOServer,
-  logger = console
+  SocketIOServerImpl = SocketIOServer, logger = console
 } = {}) {
   if (!engine || typeof engine.getSnapshot !== 'function' || typeof engine.subscribe !== 'function') {
     throw new TypeError('overlay server requires an observable Curse Engine');
   }
-
   const origins = normalizeOrigins(allowedOrigins);
   app.disable('x-powered-by');
+  app.use('/overlay', express.static(new URL('../../public/overlay', import.meta.url).pathname, {
+    dotfiles: 'deny', index: 'index.html'
+  }));
   app.use(express.static(new URL('../../public', import.meta.url).pathname, {
-    dotfiles: 'deny',
-    index: 'index.html',
-    fallthrough: true
+    dotfiles: 'deny', index: 'index.html', fallthrough: true
   }));
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   const io = new SocketIOServerImpl(httpServer, {
-    cors: {
-      origin: origins,
-      methods: ['GET', 'POST'],
-      credentials: false
-    },
+    cors: { origin: origins, methods: ['GET', 'POST'], credentials: false },
     allowRequest: (request, callback) => {
       const origin = request.headers.origin;
       callback(null, !origin || origins.includes(origin));
     }
   });
-
   function broadcastState(snapshot = engine.getSnapshot()) {
     io.emit(OVERLAY_EVENTS.CURSE_STATE, createStatePayload(snapshot));
   }
-
   io.on('connection', (socket) => {
     socket.emit(OVERLAY_EVENTS.CURSE_STATE, createStatePayload(engine.getSnapshot()));
     logger.info?.('Overlay client connected', { socketId: socket.id });
-    socket.on('disconnect', (reason) => {
-      logger.info?.('Overlay client disconnected', { socketId: socket.id, reason });
-    });
+    socket.on('disconnect', (reason) => logger.info?.('Overlay client disconnected', { socketId: socket.id, reason }));
   });
 
   const unsubscribeState = engine.subscribe((snapshot) => broadcastState(snapshot));
@@ -74,8 +53,7 @@ export function createOverlayServer({
       if (event.type === 'activated') {
         io.emit(OVERLAY_EVENTS.CURSE_ACTIVATED, createActivationPayload(event.effect));
       } else if (event.type === 'expired') {
-        io.emit(OVERLAY_EVENTS.CURSE_EXPIRED,
-          createExpirationPayload(event.effect, event.timestamp));
+        io.emit(OVERLAY_EVENTS.CURSE_EXPIRED, createExpirationPayload(event.effect, event.timestamp));
         broadcastState(event.snapshot);
       }
     })
@@ -86,12 +64,8 @@ export function createOverlayServer({
     unsubscribeEvents();
     io.close();
   }
-
   return Object.freeze({
-    app,
-    httpServer,
-    io,
-    close,
+    app, httpServer, io, close,
     listen(port = Number(process.env.PORT ?? 3000), host = process.env.HOST ?? '0.0.0.0') {
       return new Promise((resolve, reject) => {
         httpServer.once('error', reject);
@@ -101,7 +75,6 @@ export function createOverlayServer({
         });
       });
     },
-    broadcastState,
-    allowedOrigins: Object.freeze(origins)
+    broadcastState, allowedOrigins: Object.freeze(origins)
   });
 }

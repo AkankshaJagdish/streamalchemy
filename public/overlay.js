@@ -2,19 +2,17 @@
   const status = document.getElementById('curse-status');
   const countdown = document.getElementById('curse-countdown');
   let expiryInterval = null;
-  let expiresAt = null;
 
   function stopCountdown() {
     if (expiryInterval !== null) window.clearInterval(expiryInterval);
     expiryInterval = null;
-    expiresAt = null;
     countdown.textContent = '';
   }
 
   function startCountdown(effect) {
     stopCountdown();
-    expiresAt = Number(effect?.expiresAt);
-    if (!Number.isFinite(expiresAt)) return;
+    if (!Number.isFinite(effect?.expiresAt)) return;
+    const expiresAt = effect.expiresAt;
     const render = () => {
       const remaining = Math.max(0, expiresAt - Date.now());
       countdown.textContent = `${Math.ceil(remaining / 1000)}s remaining`;

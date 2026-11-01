@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080615">
+  <title>StreamAlchemy — Gravity Curse Overlay</title>
+  <link rel="stylesheet" href="/overlay/style.css">
+  <link rel="stylesheet" href="/overlay/animations.css">
+</head>
+<body>
+  <main id="streamalchemy-overlay" class="overlay is-idle" aria-live="polite" aria-atomic="true">
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+    <section class="curse-card" aria-label="StreamAlchemy Gravity Curse status">
+      <div class="brand-row">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" role="presentation">
+            <path d="M20 3 23.7 14.5 36 20l-12.3 5.5L20 37l-3.7-11.5L4 20l12.3-5.5L20 3Z"/>
+            <circle cx="20" cy="20" r="3.4"/>
+          </svg>
+        </span>
+        <span class="brand-name">STREAM<span>ALCHEMY</span></span>
+        <span class="brand-rule"></span>
+        <span class="brand-kicker">LIVE EFFECT</span>
+      </div>
+
+      <div class="curse-main">
+        <div class="curse-emblem" aria-hidden="true">
+          <div class="emblem-ring ring-outer"></div>
+          <div class="emblem-ring ring-inner"></div>
+          <div class="emblem-core">✦</div>
+        </div>
+        <div class="curse-copy">
+          <div class="eyebrow"><span class="status-dot"></span><span id="curse-status">GRAVITY STABLE</span></div>
+          <h1 id="curse-title">Gravity Curse</h1>
+          <p id="curse-subtitle">The world is in balance. For now.</p>
+        </div>
+      </div>
+
+      <div class="timer-row">
+        <div class="timer-label">
+          <span>CURSE DURATION</span>
+          <span id="timer-state">READY</span>
+        </div>
+        <div class="timer-value" id="curse-countdown" role="timer" aria-label="No active curse">—<span> SEC</span></div>
+        <div class="timer-track" aria-hidden="true">
+          <div id="timer-progress" class="timer-progress"></div>
+        </div>
+      </div>
+      <div class="footer-row">
+        <span id="connection-state" class="connection-state"><i></i> CONNECTING TO ENGINE</span>
+        <span class="footer-note">A LITTLE MAGIC, A LOT OF CHAOS</span>
+      </div>
+    </section>
+
+    <div class="gravity-field" aria-hidden="true">
+      <div class="gravity-well"></div>
+      <div class="orbit orbit-a"></div>
+      <div class="orbit orbit-b"></div>
+      <div class="orbit orbit-c"></div>
+      <div class="particle particle-1">✧</div>
+      <div class="particle particle-2">·</div>
+      <div class="particle particle-3">✦</div>
+      <div class="particle particle-4">·</div>
+      <div class="particle particle-5">✧</div>
+      <div class="particle particle-6">+</div>
+      <div class="particle particle-7">·</div>
+      <div class="particle particle-8">✦</div>
+      <div class="particle particle-9">·</div>
+      <div class="particle particle-10">✧</div>
+      <div class="particle particle-11">+</div>
+      <div class="particle particle-12">·</div>
+    </div>
+  </main>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/overlay/overlay.js"></script>
+</body>
+</html>
