@@ -10,73 +10,74 @@ import { logger as defaultLogger } from '../utils/logger.js';
 const TOKEN_REVALIDATION_INTERVAL_MS = 60 * 60 * 1000;
 
 export async function startTwitchIntegration({
-  env = process.env,
-  fetchImpl = fetch,
-  WebSocketImpl,
-  engine = createCurseEngine(),
-  onRedemption = async () => {},
-  onRevocation = () => {},
-  onStatus = () => {},
-  logger = defaultLogger,
-  setIntervalImpl = setInterval,
-  clearIntervalImpl = clearInterval,
+  env = process.env, fetchImpl = fetch, WebSocketImpl, engine = createCurseEngine(),
+  onRedemption = async () => {}, onRevocation = () => {}, onStatus = () => {},
+  logger = defaultLogger, setIntervalImpl = setInterval, clearIntervalImpl = clearInterval,
   revalidationIntervalMs = TOKEN_REVALIDATION_INTERVAL_MS
 } = {}) {
   const { twitch: config } = loadConfig(env);
   const auth = await validateConfiguredTwitchAuth({ config, fetchImpl });
-  logger.info('Twitch token validated', {
-    userId: auth.userId,
-    login: auth.login,
-    expiresIn: auth.expiresIn,
-    scopes: auth.scopes
+  logger.info('Twitch authentication validated', {
+    userId: auth.userId, login: auth.login, expiresIn: auth.expiresIn, scopes: auth.scopes
   });
 
-  const reportEngineResult = (result, source) => {
-    if (!result.activated && result.reason !== 'already-active') {
-      logger.warn('Curse activation request rejected', { source, reason: result.reason });
+  const activateFromTwitch = (request) => {
+    const result = engine.activate(request);
+    if (result.activated) {
+      logger.info('Curse activated', {
+        curse: request.curse, source: request.source, eventId: request.eventId,
+        startedAt: result.effect.startedAt, expiresAt: result.effect.expiresAt
+      });
+    } else {
+      logger.warn('Curse activation rejected', {
+        curse: request.curse, source: request.source, eventId: request.eventId, reason: result.reason
+      });
     }
     return result;
   };
 
-  // Chat and Channel Points share this one activation path and Curse Engine.
-  const activateFromTwitch = (request) =>
-    reportEngineResult(engine.activate(request), request.source);
-
   const handleChatMessage = createChatHandler({
     activateCurse: activateFromTwitch,
+    onCommand: ({ messageId, username, command }) => {
+      logger.info('Incoming Twitch chat command', { messageId, username, command });
+    },
     onError: (error) => logger.error('Chat command processing failed', { message: error.message })
   });
 
-  // Fulfillment is deliberately disabled under channel:read:redemptions.
-  // It requires channel:manage:redemptions, which is not requested by the MVP.
+  // channel:manage:redemptions is intentionally not requested by this MVP.
   const redemptionService = createRedemptionService({
-    clientId: config.clientId,
-    accessToken: config.accessToken,
-    broadcasterUserId: config.broadcasterUserId,
-    apiBaseUrl: config.apiBaseUrl,
-    fetchImpl,
-    canManageRedemptions: false
+    clientId: config.clientId, accessToken: config.accessToken,
+    broadcasterUserId: config.broadcasterUserId, apiBaseUrl: config.apiBaseUrl,
+    fetchImpl, canManageRedemptions: false
   });
-
   const handleRedemption = createChannelPointsHandler({
     gravityRewardId: config.gravityRewardId,
     activateCurse: activateFromTwitch,
     redemptionService,
-    onProcessed: onRedemption,
+    onReceived: ({ redemptionId, rewardId, username }) => {
+      logger.info('Gravity Curse Channel Points redemption received', { redemptionId, rewardId, username });
+    },
+    onProcessed: async (notification, result) => {
+      logger.info('Channel Points redemption processed', {
+        redemptionId: result.redemptionId, rewardId: result.rewardId,
+        activated: result.activated, fulfilled: result.fulfillment?.fulfilled ?? false,
+        fulfillmentReason: result.fulfillment?.reason
+      });
+      await onRedemption(notification, result);
+    },
     onError: (error, context) => logger.error('Channel Points processing failed', {
-      message: error.message,
-      ...context
+      message: error.message, ...context
     })
   });
 
   const eventSub = createEventSubClient({
-    config,
-    fetchImpl,
-    ...(WebSocketImpl ? { WebSocketImpl } : {}),
-    onChatMessage: handleChatMessage,
-    onRedemption: handleRedemption,
-    onRevocation,
-    onStatus,
+    config, fetchImpl, ...(WebSocketImpl ? { WebSocketImpl } : {}),
+    onChatMessage: handleChatMessage, onRedemption: handleRedemption,
+    onRevocation, onStatus: (status) => {
+      if (status.state === 'connected' || status.state === 'welcomed') logger.info('EventSub status', status);
+      else if (status.state === 'error' || status.state === 'closed') logger.warn('EventSub status', status);
+      onStatus(status);
+    },
     logger
   });
 
@@ -89,29 +90,32 @@ export async function startTwitchIntegration({
     eventSub.stop();
     engine.shutdown();
   };
+  const unsubscribeEngineEvents = typeof engine.subscribeEvents === 'function'
+    ? engine.subscribeEvents((event) => {
+      if (event.type === 'expired') logger.info('Curse expired', {
+        curse: event.effect.id, expiredAt: event.timestamp, state: event.snapshot.state
+      });
+    })
+    : () => {};
 
   try {
     const session = await eventSub.start();
+    logger.info('EventSub session established', { sessionId: session.sessionId });
     validationTimer = setIntervalImpl(async () => {
       try {
         await validateConfiguredTwitchAuth({ config, fetchImpl });
         logger.info('Twitch access token hourly validation succeeded');
       } catch (error) {
-        logger.error('Twitch access token is no longer valid; stopping EventSub', {
-          message: error.message
-        });
+        logger.error('Twitch access token invalid; stopping EventSub', { message: error.message });
         stop();
       }
     }, revalidationIntervalMs);
-
     return Object.freeze({
-      auth,
-      sessionId: session.sessionId,
-      engine,
-      stop,
-      eventSub
+      auth, sessionId: session.sessionId, engine, stop, eventSub,
+      dispose() { unsubscribeEngineEvents(); stop(); }
     });
   } catch (error) {
+    unsubscribeEngineEvents();
     stop();
     throw error;
   }

@@ -17,7 +17,8 @@
     connected = isConnected;
     connection.classList.toggle('is-connected', isConnected);
     connection.classList.toggle('is-disconnected', !isConnected);
-    connection.innerHTML = isConnected ? '<i></i> ENGINE CONNECTED' : '<i></i> RECONNECTING TO ENGINE';
+    connection.replaceChildren(document.createElement('i'));
+    connection.append(document.createTextNode(isConnected ? ' ENGINE CONNECTED' : ' RECONNECTING TO ENGINE'));
   }
   function stopCountdown() {
     if (intervalId !== null) window.clearInterval(intervalId);
@@ -34,7 +35,7 @@
     status.textContent = 'GRAVITY STABLE';
     timerState.textContent = 'READY';
     timerState.style.color = '#86efac';
-    countdown.innerHTML = '—<span> SEC</span>';
+    countdown.replaceChildren(document.createTextNode('—'), Object.assign(document.createElement('span'), { textContent: ' SEC' }));
     countdown.setAttribute('aria-label', 'No active curse');
   }
   function isValidEffect(effect) {
@@ -47,7 +48,7 @@
     const now = Date.now();
     const remainingMs = Math.max(0, activeEffect.expiresAt - now);
     const seconds = Math.ceil(remainingMs / 1000);
-    countdown.innerHTML = `${seconds}<span> SEC</span>`;
+    countdown.replaceChildren(document.createTextNode(String(seconds)), Object.assign(document.createElement('span'), { textContent: ' SEC' }));
     countdown.setAttribute('aria-label', `${seconds} seconds remaining`);
     const total = activeEffect.duration || (activeEffect.expiresAt - activeEffect.startedAt);
     const elapsed = Math.max(0, Math.min(total, now - activeEffect.startedAt));
@@ -55,14 +56,8 @@
     if (remainingMs <= 0) renderIdle('The gravity field has faded.');
   }
   function renderActive(effect) {
-    if (!isValidEffect(effect)) {
-      renderIdle('Waiting for a valid curse signal.');
-      return false;
-    }
-    if (effect.expiresAt <= Date.now()) {
-      renderIdle('The gravity field has faded.');
-      return false;
-    }
+    if (!isValidEffect(effect)) { renderIdle('Waiting for a valid curse signal.'); return false; }
+    if (effect.expiresAt <= Date.now()) { renderIdle('The gravity field has faded.'); return false; }
     stopCountdown();
     activeEffect = {
       id: effect.id, name: effect.name, startedAt: effect.startedAt,
@@ -76,7 +71,7 @@
     timerState.textContent = 'IN PROGRESS';
     timerState.style.color = '#d8b4fe';
     renderCountdown();
-    intervalId = window.setInterval(renderCountdown, 100);
+    if (activeEffect) intervalId = window.setInterval(renderCountdown, 100);
     return true;
   }
   const socket = window.io({
@@ -97,7 +92,6 @@
     if (snapshot.state === 'active') renderActive(snapshot.effect);
     else if (snapshot.effect === null) renderIdle();
   });
-
   renderIdle();
   setConnection(false);
   window.StreamAlchemyOverlay = Object.freeze({

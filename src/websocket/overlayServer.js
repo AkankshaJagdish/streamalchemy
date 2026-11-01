@@ -12,7 +12,6 @@ function normalizeOrigins(origins) {
   if (typeof origins === 'string' && origins.trim()) return origins.split(',').map((origin) => origin.trim()).filter(Boolean);
   return [...DEFAULT_ALLOWED_ORIGINS];
 }
-
 export function createOverlayServer({
   engine, app = express(), httpServer = createServer(app),
   allowedOrigins = process.env.OVERLAY_ALLOWED_ORIGINS,
@@ -30,7 +29,6 @@ export function createOverlayServer({
     dotfiles: 'deny', index: 'index.html', fallthrough: true
   }));
   app.get('/health', (_req, res) => res.json({ ok: true }));
-
   const io = new SocketIOServerImpl(httpServer, {
     cors: { origin: origins, methods: ['GET', 'POST'], credentials: false },
     allowRequest: (request, callback) => {
@@ -46,24 +44,17 @@ export function createOverlayServer({
     logger.info?.('Overlay client connected', { socketId: socket.id });
     socket.on('disconnect', (reason) => logger.info?.('Overlay client disconnected', { socketId: socket.id, reason }));
   });
-
   const unsubscribeState = engine.subscribe((snapshot) => broadcastState(snapshot));
   const unsubscribeEvents = typeof engine.subscribeEvents === 'function'
     ? engine.subscribeEvents((event) => {
-      if (event.type === 'activated') {
-        io.emit(OVERLAY_EVENTS.CURSE_ACTIVATED, createActivationPayload(event.effect));
-      } else if (event.type === 'expired') {
+      if (event.type === 'activated') io.emit(OVERLAY_EVENTS.CURSE_ACTIVATED, createActivationPayload(event.effect));
+      else if (event.type === 'expired') {
         io.emit(OVERLAY_EVENTS.CURSE_EXPIRED, createExpirationPayload(event.effect, event.timestamp));
         broadcastState(event.snapshot);
       }
     })
     : () => {};
-
-  function close() {
-    unsubscribeState();
-    unsubscribeEvents();
-    io.close();
-  }
+  function close() { unsubscribeState(); unsubscribeEvents(); io.close(); }
   return Object.freeze({
     app, httpServer, io, close,
     listen(port = Number(process.env.PORT ?? 3000), host = process.env.HOST ?? '0.0.0.0') {
