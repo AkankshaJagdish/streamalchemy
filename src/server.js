@@ -34,18 +34,30 @@ export async function createApplication({
   });
 }
 
-async function main() {
-  const application = await createApplication();
+export async function startApplicationServer({
+  application,
+  logger: appLogger = logger,
+  processImpl = process
+} = {}) {
+  if (!application || typeof application.listen !== 'function' || typeof application.close !== 'function') {
+    throw new TypeError('startApplicationServer requires an application lifecycle handle');
+  }
   try {
     const address = await application.listen();
-    logger.info('StreamAlchemy server listening', { address });
-    const shutdown = () => { application.close(); process.exitCode = 0; };
-    process.once('SIGINT', shutdown);
-    process.once('SIGTERM', shutdown);
+    appLogger.info('StreamAlchemy server listening', { address });
+    const shutdown = () => { application.close(); processImpl.exitCode = 0; };
+    processImpl.once('SIGINT', shutdown);
+    processImpl.once('SIGTERM', shutdown);
+    return address;
   } catch (error) {
     application.close();
     throw error;
   }
+}
+
+async function main() {
+  const application = await createApplication();
+  await startApplicationServer({ application, logger });
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(process.argv[1])) {
   main().catch((error) => {
