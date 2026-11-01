@@ -8,7 +8,7 @@ const REQUIRED_ENV = [
 export function loadConfig(env = process.env) {
   const missing = REQUIRED_ENV.filter((key) => !String(env[key] ?? '').trim());
   if (missing.length) {
-    throw new Error(\`Missing required environment variables: \${missing.join(', ')}\`);
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
   const broadcasterUserId = String(env.TWITCH_BROADCASTER_USER_ID).trim();
