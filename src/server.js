@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createOverlayServer } from './websocket/overlayServer.js';
 import { createCurseEngine } from './engine/curseEngine.js';
 import { startTwitchIntegration } from './twitch/index.js';
@@ -59,7 +59,7 @@ async function main() {
   const application = await createApplication();
   await startApplicationServer({ application, logger });
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(process.argv[1])) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     logger.error('StreamAlchemy startup failed', { message: error.message });
     process.exitCode = 1;
