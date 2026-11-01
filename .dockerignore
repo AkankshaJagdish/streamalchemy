@@ -26,3 +26,4 @@ local-recordings
 *.webm
 *.wav
 *.mp3
+npm-audit-report.json
