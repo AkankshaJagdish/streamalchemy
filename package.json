@@ -1,0 +1,17 @@
+{
+  "name": "streamalchemy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Twitch audience participation curses for stream overlays",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
