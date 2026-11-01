@@ -2,60 +2,12 @@ import { loadConfig } from '../config.js';
 import { validateConfiguredTwitchAuth } from './auth.js';
 import { createEventSubClient } from './eventsub.js';
 import { createChatHandler } from './chatHandler.js';
+import { createChannelPointsHandler } from './channelPointsHandler.js';
+import { createRedemptionService } from './redemptionService.js';
 import { createCurseEngine } from '../engine/curseEngine.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 
 const TOKEN_REVALIDATION_INTERVAL_MS = 60 * 60 * 1000;
-
-export function createRedemptionHandler({
-  activateCurse,
-  onRedemption = async () => {},
-  onError = () => {}
-}) {
-  if (typeof activateCurse !== 'function') {
-    throw new TypeError('activateCurse must be a function');
-  }
-
-  return async function handleRedemption(notification) {
-    if (notification?.metadata?.message_type !== 'notification') {
-      return { handled: false, reason: 'not-a-notification' };
-    }
-    const type = notification.metadata.subscription_type
-      ?? notification.payload?.subscription?.type;
-    if (type !== 'channel.channel_points_custom_reward_redemption.add') {
-      return { handled: false, reason: 'not-a-redemption' };
-    }
-
-    const event = notification.payload?.event;
-    if (!event || typeof event !== 'object' || typeof event.id !== 'string') {
-      return { handled: false, reason: 'invalid-redemption' };
-    }
-
-    // Match the designated reward by title. No viewer-provided fields are
-    // interpreted as code or used to select an arbitrary curse.
-    const rewardTitle = event.reward?.title;
-    if (typeof rewardTitle !== 'string' || rewardTitle.trim().toLowerCase() !== 'gravity curse') {
-      return { handled: true, activated: false, reason: 'unsupported-reward' };
-    }
-
-    try {
-      const result = await activateCurse({
-        curse: 'gravity',
-        source: 'channel-points',
-        eventId: event.id,
-        viewer: {
-          id: event.user_id,
-          username: event.user_login ?? event.user_name ?? 'unknown'
-        }
-      });
-      await onRedemption(notification, result);
-      return { handled: true, ...result };
-    } catch (error) {
-      onError(error);
-      return { handled: true, activated: false, reason: 'activation-failed' };
-    }
-  };
-}
 
 export async function startTwitchIntegration({
   env = process.env,
@@ -86,7 +38,7 @@ export async function startTwitchIntegration({
     return result;
   };
 
-  // This exact same engine method handles both Twitch input sources.
+  // Chat and Channel Points share this one activation path and Curse Engine.
   const activateFromTwitch = (request) =>
     reportEngineResult(engine.activate(request), request.source);
 
@@ -95,10 +47,26 @@ export async function startTwitchIntegration({
     onError: (error) => logger.error('Chat command processing failed', { message: error.message })
   });
 
-  const handleRedemption = createRedemptionHandler({
+  // Fulfillment is deliberately disabled under channel:read:redemptions.
+  // It requires channel:manage:redemptions, which is not requested by the MVP.
+  const redemptionService = createRedemptionService({
+    clientId: config.clientId,
+    accessToken: config.accessToken,
+    broadcasterUserId: config.broadcasterUserId,
+    apiBaseUrl: config.apiBaseUrl,
+    fetchImpl,
+    canManageRedemptions: false
+  });
+
+  const handleRedemption = createChannelPointsHandler({
+    gravityRewardId: config.gravityRewardId,
     activateCurse: activateFromTwitch,
-    onRedemption,
-    onError: (error) => logger.error('Redemption processing failed', { message: error.message })
+    redemptionService,
+    onProcessed: onRedemption,
+    onError: (error, context) => logger.error('Channel Points processing failed', {
+      message: error.message,
+      ...context
+    })
   });
 
   const eventSub = createEventSubClient({
