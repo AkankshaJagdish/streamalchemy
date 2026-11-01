@@ -1,0 +1,152 @@
+import { EventEmitter } from 'node:events';
+import { describe, expect, it, vi } from 'vitest';
+import { createEventSubClient, parseEventSubMessage } from '../src/twitch/eventsub.js';
+
+class MockSocket extends EventEmitter {
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  static instances = [];
+  constructor(url) {
+    super();
+    this.url = url;
+    this.readyState = MockSocket.OPEN;
+    MockSocket.instances.push(this);
+  }
+  close(code = 1000, reason = '') {
+    this.readyState = MockSocket.CLOSED;
+    this.emit('close', code, Buffer.from(reason));
+  }
+  sendFrame(message) {
+    this.emit('message', Buffer.from(JSON.stringify(message)));
+  }
+}
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+const welcome = (id) => ({
+  metadata: { message_type: 'session_welcome' },
+  payload: { session: { id, status: 'connected', keepalive_timeout_seconds: 30, reconnect_url: null } }
+});
+const keepalive = () => ({ metadata: { message_type: 'session_keepalive' }, payload: {} });
+
+describe('EventSub WebSocket client', () => {
+  it('parses valid frames and rejects malformed frames', () => {
+    expect(parseEventSubMessage(JSON.stringify(keepalive())).metadata.message_type).toBe('session_keepalive');
+    expect(() => parseEventSubMessage('bad-json')).toThrow();
+    expect(() => parseEventSubMessage('{}')).toThrow(/message_type/);
+  });
+
+  it('handles welcome, registers both subscriptions and keepalive', async () => {
+    MockSocket.instances = [];
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true, status: 202, json: async () => ({ data: [{ id: 'sub-id' }] })
+    });
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100', botUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket
+    });
+    const started = client.start();
+    const socket = MockSocket.instances[0];
+    socket.emit('open');
+    socket.sendFrame(welcome('session-abc'));
+    await started;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const bodies = fetchImpl.mock.calls.map(([, options]) => JSON.parse(options.body));
+    expect(bodies.map((b) => b.type)).toEqual([
+      'channel.chat.message',
+      'channel.channel_points_custom_reward_redemption.add'
+    ]);
+    socket.sendFrame(keepalive());
+    client.stop();
+  });
+
+  it('routes notifications to the matching callback and handles revocation', async () => {
+    MockSocket.instances = [];
+    const onChatMessage = vi.fn();
+    const onRedemption = vi.fn();
+    const onRevocation = vi.fn();
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl: vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) }),
+      WebSocketImpl: MockSocket,
+      onChatMessage,
+      onRedemption,
+      onRevocation
+    });
+    const started = client.start();
+    MockSocket.instances[0].sendFrame(welcome('s1'));
+    await started;
+    MockSocket.instances[0].sendFrame({
+      metadata: { message_type: 'notification', subscription_type: 'channel.chat.message' },
+      payload: { event: { message: { text: '!curse gravity' } } }
+    });
+    MockSocket.instances[0].sendFrame({
+      metadata: { message_type: 'notification', subscription_type: 'channel.channel_points_custom_reward_redemption.add' },
+      payload: { event: { id: 'redemption-1' } }
+    });
+    MockSocket.instances[0].sendFrame({
+      metadata: { message_type: 'revocation' },
+      payload: { subscription: { type: 'channel.chat.message', status: 'authorization_revoked' } }
+    });
+    await tick();
+    expect(onChatMessage).toHaveBeenCalledOnce();
+    expect(onRedemption).toHaveBeenCalledOnce();
+    expect(onRevocation).toHaveBeenCalledOnce();
+    client.stop();
+  });
+
+  it('uses Twitch reconnect URL unchanged and performs handover after welcome', async () => {
+    MockSocket.instances = [];
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket
+    });
+    const started = client.start();
+    const oldSocket = MockSocket.instances[0];
+    oldSocket.sendFrame(welcome('s-old'));
+    await started;
+
+    const reconnectUrl = 'wss://eventsub.wss.twitch.tv/ws?session=keep-this-exactly';
+    oldSocket.sendFrame({
+      metadata: { message_type: 'session_reconnect' },
+      payload: { session: { reconnect_url: reconnectUrl } }
+    });
+    const newSocket = MockSocket.instances[1];
+    expect(newSocket.url).toBe(reconnectUrl);
+    expect(oldSocket.readyState).toBe(MockSocket.OPEN);
+    newSocket.sendFrame(welcome('s-new'));
+    await tick();
+    expect(oldSocket.readyState).toBe(MockSocket.CLOSED);
+    expect(client.getSessionId()).toBe('s-new');
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // no duplicate subscriptions on handover
+    client.stop();
+  });
+
+  it('recreates subscriptions after an unexpected close', async () => {
+    MockSocket.instances = [];
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
+    const timers = [];
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket,
+      setTimer: (fn) => { timers.push(fn); return fn; },
+      clearTimer: vi.fn(),
+      reconnectDelayMs: 0
+    });
+    const started = client.start();
+    MockSocket.instances[0].sendFrame(welcome('s-old'));
+    await started;
+    MockSocket.instances[0].close(1006, 'network lost');
+    timers.find((fn) => typeof fn === 'function')();
+    await tick();
+    const fresh = MockSocket.instances[1];
+    fresh.sendFrame(welcome('s-fresh'));
+    await tick();
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(client.getSessionId()).toBe('s-fresh');
+    client.stop();
+  });
+});
