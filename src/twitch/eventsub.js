@@ -235,17 +235,16 @@ export function createEventSubClient({
           keepaliveTimer = null;
         }
         onStatus({ state: 'closed', code, reason: reason?.toString?.() ?? '' });
-        if (socket === handoverSocket) handoverSocket = null;
+        const wasHandoverSocket = socket === handoverSocket;
+        if (wasHandoverSocket) handoverSocket = null;
         if (socket === activeSocket && !stopped) {
           activeSessionId = null;
           keepaliveTimeoutSeconds = null;
           if (!handoverSocket) scheduleFreshConnection();
         }
-        if (socket === handoverSocket) {
-          handoverSocket = null;
-          if (!stopped && (!activeSocket || activeSocket.readyState >= WebSocketImpl.CLOSING)) {
-            scheduleFreshConnection();
-          }
+        if (wasHandoverSocket && !stopped
+          && (!activeSocket || activeSocket.readyState >= WebSocketImpl.CLOSING)) {
+          scheduleFreshConnection();
         }
         if (!welcomed) {
           const error = new Error(`EventSub socket closed before welcome (code ${code})`);
