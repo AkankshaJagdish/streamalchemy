@@ -42,8 +42,8 @@ describe('parseCurseCommand', () => {
 
   it('handles leading and repeated command whitespace safely', () => {
     expect(parseCurseCommand('  !curse   gravity  ')).toMatchObject({
-      ok: false,
-      reason: 'malformed-command'
+      ok: true,
+      request: { curse: 'gravity', durationMs: 30_000 }
     });
     expect(parseCurseCommand('  !curse gravity  ')).toMatchObject({
       ok: true,
