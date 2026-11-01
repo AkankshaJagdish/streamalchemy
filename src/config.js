@@ -8,7 +8,7 @@ const REQUIRED_ENV = [
 export function loadConfig(env = process.env) {
   const missing = REQUIRED_ENV.filter((key) => !String(env[key] ?? '').trim());
   if (missing.length) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    throw new Error(\`Missing required environment variables: \${missing.join(', ')}\`);
   }
 
   const broadcasterUserId = String(env.TWITCH_BROADCASTER_USER_ID).trim();
@@ -16,13 +16,13 @@ export function loadConfig(env = process.env) {
   const botUserId = String(env.TWITCH_BOT_USER_ID ?? broadcasterUserId).trim();
   const gravityRewardId = String(env.TWITCH_GRAVITY_REWARD_ID ?? '').trim();
 
-  if (!/^\\d+$/.test(broadcasterUserId)) {
+  if (!/^\d+$/.test(broadcasterUserId)) {
     throw new Error('TWITCH_BROADCASTER_USER_ID must be a numeric Twitch user ID');
   }
   if (!/^[a-z0-9_]{1,25}$/.test(broadcasterLogin)) {
     throw new Error('TWITCH_BROADCASTER_LOGIN must be a valid Twitch login');
   }
-  if (!/^\\d+$/.test(botUserId)) {
+  if (!/^\d+$/.test(botUserId)) {
     throw new Error('TWITCH_BOT_USER_ID must be a numeric Twitch user ID');
   }
   if (gravityRewardId && !/^[A-Za-z0-9_-]+$/.test(gravityRewardId)) {

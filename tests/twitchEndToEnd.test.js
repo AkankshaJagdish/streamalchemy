@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { createCurseEngine } from '../src/engine/curseEngine.js';
 import { createChatHandler } from '../src/twitch/chatHandler.js';
 import { createChannelPointsHandler } from '../src/twitch/channelPointsHandler.js';
+import { createEventSubClient } from '../src/twitch/eventsub.js';
 import { createOverlayServer } from '../src/websocket/overlayServer.js';
 import { OVERLAY_EVENTS } from '../src/websocket/overlayEvents.js';
 
@@ -19,6 +20,27 @@ class MockHttpServer extends EventEmitter {
   listen(_port, _host, callback) { callback(); }
   address() { return { port: 3000 }; }
 }
+class MockEventSubSocket extends EventEmitter {
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  static instances = [];
+  constructor(url) {
+    super();
+    this.url = url;
+    this.readyState = MockEventSubSocket.OPEN;
+    MockEventSubSocket.instances.push(this);
+  }
+  close(code = 1000, reason = '') {
+    this.readyState = MockEventSubSocket.CLOSED;
+    this.emit('close', code, Buffer.from(reason));
+  }
+  sendFrame(message) { this.emit('message', Buffer.from(JSON.stringify(message))); }
+}
+const welcome = (id) => ({
+  metadata: { message_type: 'session_welcome' },
+  payload: { session: { id, status: 'connected', keepalive_timeout_seconds: 30 } }
+});
 const chatEnvelope = (messageId = 'chat-1') => ({
   metadata: { message_type: 'notification', subscription_type: 'channel.chat.message' },
   payload: { event: {
@@ -33,34 +55,65 @@ const redemptionEnvelope = (redemptionId = 'redemption-1', rewardId = 'gravity-r
     reward: { id: rewardId, title: 'Gravity Curse' }
   } }
 });
+const apiResponse = () => ({
+  ok: true, status: 202,
+  json: async () => ({ data: [{ id: 'sub-id' }] })
+});
 
 describe('StreamAlchemy mocked full integration flows', () => {
   let engine;
   let overlay;
+  let eventSub;
   let io;
   afterEach(() => {
+    eventSub?.stop();
     overlay?.close();
-    overlay = null;
     engine?.shutdown();
+    eventSub = null;
+    overlay = null;
     engine = null;
     vi.useRealTimers();
+    MockEventSubSocket.instances = [];
   });
   function setup() {
     vi.useFakeTimers({ now: 1_000 });
     engine = createCurseEngine();
     overlay = createOverlayServer({
-      engine, httpServer: new MockHttpServer(),
+      engine,
+      httpServer: new MockHttpServer(),
       SocketIOServerImpl: vi.fn(() => new MockIo()),
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     });
     io = overlay.io;
   }
+  async function connectEventSub({ onChatMessage, onRedemption }) {
+    const fetchImpl = vi.fn().mockResolvedValue(apiResponse());
+    eventSub = createEventSubClient({
+      config: {
+        clientId: 'test-client',
+        accessToken: 'mock-access-token',
+        broadcasterUserId: '100',
+        botUserId: '100'
+      },
+      fetchImpl,
+      WebSocketImpl: MockEventSubSocket,
+      onChatMessage,
+      onRedemption,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    });
+    const started = eventSub.start();
+    MockEventSubSocket.instances[0].sendFrame(welcome('mock-session'));
+    await started;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    return MockEventSubSocket.instances[0];
+  }
 
-  it('chat → Curse Engine → overlay broadcast → 30-second expiration reset', async () => {
+  it('chat → EventSub → parser/handler → Curse Engine → overlay → expiration', async () => {
     setup();
-    const handler = createChatHandler({ activateCurse: (request) => engine.activate(request) });
-    const result = await handler(chatEnvelope());
-    expect(result.activated).toBe(true);
+    const chat = createChatHandler({ activateCurse: (request) => engine.activate(request) });
+    const socket = await connectEventSub({ onChatMessage: chat });
+    socket.sendFrame(chatEnvelope());
+
     expect(engine.getSnapshot()).toMatchObject({
       state: 'ACTIVE',
       activeEffect: {
@@ -85,15 +138,18 @@ describe('StreamAlchemy mocked full integration flows', () => {
     });
   });
 
-  it('Channel Points → same Curse Engine → overlay broadcast → expiration', async () => {
+  it('Channel Points → EventSub → reward-ID handler → same Curse Engine → overlay → expiration', async () => {
     setup();
-    const handler = createChannelPointsHandler({
+    const channelPoints = createChannelPointsHandler({
       gravityRewardId: 'gravity-reward-id',
       activateCurse: (request) => engine.activate(request)
     });
-    const result = await handler(redemptionEnvelope());
-    expect(result.activated).toBe(true);
-    expect(engine.getActiveEffect()).toMatchObject({ startedAt: 1_000, expiresAt: 31_000 });
+    const socket = await connectEventSub({ onRedemption: channelPoints });
+    socket.sendFrame(redemptionEnvelope());
+
+    expect(engine.getActiveEffect()).toMatchObject({
+      id: 'gravity', startedAt: 1_000, expiresAt: 31_000, duration: 30_000
+    });
     expect(io.emitted).toContainEqual({
       event: OVERLAY_EVENTS.CURSE_ACTIVATED,
       payload: { id: 'gravity', name: 'Gravity Curse', startedAt: 1_000, expiresAt: 31_000, duration: 30_000 }
@@ -108,12 +164,12 @@ describe('StreamAlchemy mocked full integration flows', () => {
 
   it('unrelated reward ID cannot activate gravity', async () => {
     setup();
-    const handler = createChannelPointsHandler({
+    const channelPoints = createChannelPointsHandler({
       gravityRewardId: 'gravity-reward-id',
       activateCurse: (request) => engine.activate(request)
     });
-    await expect(handler(redemptionEnvelope('redemption-2', 'other-reward')))
-      .resolves.toMatchObject({ activated: false, reason: 'unrelated-reward' });
+    const socket = await connectEventSub({ onRedemption: channelPoints });
+    socket.sendFrame(redemptionEnvelope('redemption-2', 'other-reward'));
     expect(engine.getState()).toBe('IDLE');
     expect(io.emitted.some((entry) => entry.event === OVERLAY_EVENTS.CURSE_ACTIVATED)).toBe(false);
   });
@@ -132,11 +188,11 @@ describe('StreamAlchemy mocked full integration flows', () => {
     expect(engine.getState()).toBe('IDLE');
   });
 
-  it('overlay event payloads contain no Twitch credentials', () => {
+  it('overlay payloads contain no Twitch credentials', () => {
     setup();
     engine.activate({ curse: 'gravity', source: 'twitch-chat' });
-    const serialized = JSON.stringify(io.emitted);
-    expect(serialized).not.toMatch(/accessToken|clientSecret|authorization|TWITCH_USER_ACCESS_TOKEN/i);
+    const encoded = JSON.stringify(io.emitted);
+    expect(encoded).not.toMatch(/accessToken|clientSecret|authorization|TWITCH_USER_ACCESS_TOKEN/i);
   });
 
   it('chat reports a rejected engine activation as rejected, not as success', async () => {
@@ -147,11 +203,12 @@ describe('StreamAlchemy mocked full integration flows', () => {
       .resolves.toMatchObject({ handled: true, activated: false, reason: 'already-active' });
   });
 
-  it('concurrent duplicate redemption cannot run activation twice', async () => {
-    const activation = vi.fn();
+  it('concurrent duplicate redemption cannot invoke activation twice', async () => {
     let finish;
-    activation.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    const handler = createChannelPointsHandler({ gravityRewardId: 'gravity-reward-id', activateCurse: activation });
+    const activation = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    const handler = createChannelPointsHandler({
+      gravityRewardId: 'gravity-reward-id', activateCurse: activation
+    });
     const first = handler(redemptionEnvelope());
     await Promise.resolve();
     const second = await handler(redemptionEnvelope());
