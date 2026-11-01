@@ -124,6 +124,44 @@ describe('EventSub WebSocket client', () => {
     client.stop();
   });
 
+  it('falls back to a fresh session when a pending handover socket fails after the old socket closes', async () => {
+    MockSocket.instances = [];
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
+    const timers = [];
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket,
+      setTimer: (fn) => { timers.push(fn); return fn; },
+      clearTimer: vi.fn(),
+      reconnectDelayMs: 0
+    });
+    const started = client.start();
+    const oldSocket = MockSocket.instances[0];
+    oldSocket.sendFrame(welcome('s-old'));
+    await started;
+
+    oldSocket.sendFrame({
+      metadata: { message_type: 'session_reconnect' },
+      payload: { session: { reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?handover=1' } }
+    });
+    const handoverSocket = MockSocket.instances[1];
+    oldSocket.close(1006, 'old connection ended before handover welcome');
+    expect(timers).toHaveLength(1); // no competing fresh-session timer yet
+    handoverSocket.close(1006, 'handover failed');
+
+    expect(timers).toHaveLength(2); // fallback timer is now scheduled
+    timers[1]();
+    await tick();
+    const freshSocket = MockSocket.instances[2];
+    freshSocket.sendFrame(welcome('s-fresh'));
+    await tick();
+
+    expect(client.getSessionId()).toBe('s-fresh');
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // both subscriptions recreated on fresh session
+    client.stop();
+  });
+
   it('recreates subscriptions after an unexpected close', async () => {
     MockSocket.instances = [];
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
