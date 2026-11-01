@@ -36,11 +36,16 @@ export async function createApplication({
 
 async function main() {
   const application = await createApplication();
-  const address = await application.listen();
-  logger.info('StreamAlchemy server listening', { address });
-  const shutdown = () => { application.close(); process.exitCode = 0; };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  try {
+    const address = await application.listen();
+    logger.info('StreamAlchemy server listening', { address });
+    const shutdown = () => { application.close(); process.exitCode = 0; };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  } catch (error) {
+    application.close();
+    throw error;
+  }
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(process.argv[1])) {
   main().catch((error) => {
