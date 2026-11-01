@@ -57,6 +57,13 @@ const effect = (start = 1_000, end = start + 30_000) => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe('OBS browser overlay', () => {
+  it('tries WebSocket first and falls back to polling when WebSocket is unavailable', () => {
+    const ui = createHarness();
+    expect(ui.window.io).toHaveBeenCalledWith(expect.objectContaining({
+      transports: ['websocket', 'polling'],
+      tryAllTransports: true
+    }));
+  });
   it('renders initial inactive state', () => {
     const ui = createHarness();
     expect(ui.elements['streamalchemy-overlay'].classList.contains('is-idle')).toBe(true);
