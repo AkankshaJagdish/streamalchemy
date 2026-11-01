@@ -50,7 +50,6 @@ export function createOverlayServer({
       if (event.type === 'activated') io.emit(OVERLAY_EVENTS.CURSE_ACTIVATED, createActivationPayload(event.effect));
       else if (event.type === 'expired') {
         io.emit(OVERLAY_EVENTS.CURSE_EXPIRED, createExpirationPayload(event.effect, event.timestamp));
-        broadcastState(event.snapshot);
       }
     })
     : () => {};
