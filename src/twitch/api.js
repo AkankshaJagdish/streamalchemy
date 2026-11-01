@@ -9,6 +9,15 @@ export class TwitchApiError extends Error {
   }
 }
 
+function sameSubscription(existing, requested) {
+  if (!existing || existing.type !== requested.type || existing.version !== requested.version) {
+    return false;
+  }
+  const left = existing.condition ?? {};
+  const right = requested.condition ?? {};
+  return Object.keys(right).every((key) => String(left[key]) === String(right[key]));
+}
+
 export async function createEventSubSubscription({
   clientId,
   accessToken,
@@ -27,8 +36,8 @@ export async function createEventSubSubscription({
 
   const body = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
-    if (response.status === 409) {
-      return { created: false, duplicate: true, data: body?.data?.[0] ?? null };
+    if (response.status === 409 && sameSubscription(body?.data?.[0], subscription)) {
+      return { created: false, duplicate: true, data: body.data[0] };
     }
     const safeMessage = body?.message ?? `Twitch API request failed (HTTP ${response.status})`;
     throw new TwitchApiError(safeMessage, { status: response.status, body });

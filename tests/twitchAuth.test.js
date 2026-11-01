@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { validateAccessToken, TwitchAuthError } from '../src/twitch/auth.js';
+import {
+  validateAccessToken,
+  validateConfiguredTwitchAuth,
+  TwitchAuthError
+} from '../src/twitch/auth.js';
 
 const validToken = {
   client_id: 'client-123',
@@ -66,5 +70,32 @@ describe('validateAccessToken', () => {
 
   it('rejects missing configuration', async () => {
     await expect(validateAccessToken({ accessToken: '', clientId: '' })).rejects.toBeInstanceOf(TwitchAuthError);
+  });
+});
+
+describe('validateConfiguredTwitchAuth', () => {
+  it('requires token identity to match installed chatbot broadcaster identity', async () => {
+    await expect(validateConfiguredTwitchAuth({
+      config: {
+        accessToken: 't',
+        clientId: 'client-123',
+        broadcasterUserId: '100',
+        broadcasterLogin: 'broadcaster',
+        botUserId: '200'
+      }
+    })).rejects.toThrow(/must equal/);
+  });
+
+  it('validates broadcaster token with minimum Stage 1 scopes', async () => {
+    await expect(validateConfiguredTwitchAuth({
+      config: {
+        accessToken: 't',
+        clientId: 'client-123',
+        broadcasterUserId: '100',
+        broadcasterLogin: 'broadcaster',
+        botUserId: '100'
+      },
+      fetchImpl: vi.fn().mockResolvedValue(fetchResponse(validToken))
+    })).resolves.toMatchObject({ userId: '100' });
   });
 });

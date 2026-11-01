@@ -47,7 +47,7 @@ export async function validateAccessToken({
     throw new TwitchAuthError('A User Access Token is required; App Access Tokens cannot use EventSub WebSockets');
   }
   if (expectedUserId && token.user_id !== expectedUserId) {
-    throw new TwitchAuthError('Twitch token user ID does not match the configured broadcaster/bot identity', {
+    throw new TwitchAuthError('Twitch token user ID does not match the configured authorization identity', {
       expectedUserId,
       actualUserId: token.user_id
     });
@@ -74,5 +74,27 @@ export async function validateAccessToken({
     login: token.login,
     expiresIn: token.expires_in,
     scopes: Object.freeze([...grantedScopes])
+  });
+}
+
+/**
+ * The selected installed-chatbot model uses the broadcaster's own account
+ * to read that channel's chat. Consequently the validated token's user ID
+ * must equal both the broadcaster ID and the subscription's chat user ID.
+ */
+export async function validateConfiguredTwitchAuth({ config, fetchImpl = fetch }) {
+  if (!config) throw new TwitchAuthError('Twitch configuration is required');
+  if (config.botUserId && config.botUserId !== config.broadcasterUserId) {
+    throw new TwitchAuthError(
+      'Installed-chatbot mode requires TWITCH_BOT_USER_ID to equal TWITCH_BROADCASTER_USER_ID'
+    );
+  }
+  return validateAccessToken({
+    accessToken: config.accessToken,
+    clientId: config.clientId,
+    expectedUserId: config.broadcasterUserId,
+    expectedLogin: config.broadcasterLogin,
+    requiredScopes: REQUIRED_TWITCH_SCOPES,
+    fetchImpl
   });
 }
