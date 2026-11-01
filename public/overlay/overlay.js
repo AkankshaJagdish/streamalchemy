@@ -77,7 +77,7 @@
   const socket = window.io({
     reconnection: true, reconnectionAttempts: Infinity,
     reconnectionDelay: 500, reconnectionDelayMax: 5000,
-    timeout: 10000, transports: ['websocket', 'polling']
+    timeout: 10000, transports: ['websocket', 'polling'], tryAllTransports: true
   });
   socket.on('connect', () => setConnection(true));
   socket.on('disconnect', () => setConnection(false));

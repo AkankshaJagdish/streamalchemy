@@ -25,3 +25,78 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           find src tests public -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Build production Docker image
+        run: docker build --pull --tag streamalchemy:ci .
+      - name: Run production container smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_name="streamalchemy-ci"
+          container_port="3000"
+          docker run --detach --name "$container_name" \
+            --env TWITCH_ENABLED=false \
+            --env PORT="$container_port" \
+            --env HOST=0.0.0.0 \
+            --publish "127.0.0.1::${container_port}" \
+            streamalchemy:ci
+          cleanup() {
+            docker rm --force "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          host_port="$(docker port "$container_name" "${container_port}/tcp" | sed 's/.*://')"
+          base_url="http://127.0.0.1:${host_port}"
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "${base_url}/health" >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+
+          curl --fail --silent "${base_url}/health" | grep -F '{"ok":true}'
+          curl --fail --silent "${base_url}/overlay/" | grep -F 'StreamAlchemy — Gravity Curse Overlay'
+          for asset in style.css animations.css overlay.js; do
+            curl --fail --silent "${base_url}/overlay/${asset}" >/dev/null
+          done
+
+          test "$(docker exec "$container_name" id -u)" != "0"
+          docker exec "$container_name" sh -c 'test ! -e /app/.env'
+          if docker exec "$container_name" printenv | grep -Eq 'TWITCH_USER_ACCESS_TOKEN|TWITCH_CLIENT_SECRET'; then
+            echo "Unexpected Twitch credential variable in the container environment"
+            exit 1
+          fi
+
+          APP_URL="$base_url" node --input-type=module <<'NODE'
+          import { io } from 'socket.io-client';
+
+          const baseUrl = process.env.APP_URL;
+          for (const transport of ['websocket', 'polling']) {
+            const socket = io(baseUrl, {
+              autoConnect: false,
+              reconnection: false,
+              timeout: 3000,
+              transports: [transport]
+            });
+            const connected = new Promise((resolve, reject) => {
+              socket.once('connect', resolve);
+              socket.once('connect_error', reject);
+            });
+            const initialState = new Promise((resolve, reject) => {
+              socket.once('curse:state', resolve);
+              socket.once('connect_error', reject);
+            });
+            socket.connect();
+            try {
+              await Promise.all([connected, initialState.then((state) => {
+                if (state.state !== 'idle' || state.effect !== null) {
+                  throw new Error(`Unexpected initial state over ${transport}: ${JSON.stringify(state)}`);
+                }
+              })]);
+            } finally {
+              socket.disconnect();
+            }
+          }
+          NODE

@@ -226,6 +226,63 @@ Before calling the real Twitch integration verified, complete both flows with a 
 6. Refresh the Browser Source mid-effect; verify that it resumes at the original expiry time.
 7. Record the results and any sanitized errors for the submission.
 
+
+## Deploying on Caasify Docker Container Hosting
+
+This deployment uses the repository's Dockerfile and keeps the existing single-process application architecture. Deploy only one application replica: the Curse Engine and Twitch EventSub session are in-memory and must not be split across instances.
+
+1. In Caasify, choose **Docker Container Hosting** and create one container application.
+2. Connect the GitHub repository `AkankshaJagdish/streamalchemy`. After this deployment-preparation pull request is merged, select branch `main`.
+3. Select **Build from Dockerfile**, with the repository root as the build context and `Dockerfile` as the Dockerfile path. The image runs the existing `npm start` command.
+4. Configure the runtime environment variables listed below using Caasify's encrypted environment-variable/secret settings. Do not put credentials in the Dockerfile, Git repository, browser code, build arguments, or container image.
+5. Assign the public HTTPS domain. Once Caasify displays the final hostname, set `OVERLAY_ALLOWED_ORIGINS` to its exact origin, for example `https://YOUR-CAASIFY-DOMAIN`. Use the scheme and hostname only: no path, query string, or trailing slash.
+6. Set the platform health-check path to `/health`. The application responds with HTTP 200 and `{"ok":true}` when the HTTP server is running.
+7. Set **minimum replicas = 1** and **maximum replicas = 1**. Disable autoscaling beyond one instance and disable **scale-to-zero**.
+8. Configure the container's `PORT` from the port assigned/configured by Caasify. The application reads `process.env.PORT`; it falls back to `3000` only when no `PORT` is supplied. Set `HOST=0.0.0.0` so the HTTP server is reachable through the container ingress.
+9. Deploy and inspect the build and runtime logs. Confirm startup, Twitch token validation, and both EventSub subscription registrations. Logs must not contain access tokens or client secrets.
+10. Open `https://YOUR-CAASIFY-DOMAIN/health` and confirm HTTP 200. Then open `https://YOUR-CAASIFY-DOMAIN/overlay/`.
+11. Add `https://YOUR-CAASIFY-DOMAIN/overlay/` as the OBS Browser Source URL. Keep the Browser Source connected to the same public service.
+12. Complete the public Socket.IO test below before treating the deployment as accepted.
+
+### Caasify runtime environment
+
+Set these values in the Caasify runtime configuration, not in source files:
+
+| Variable | Required | Value |
+|---|---:|---|
+| `TWITCH_CLIENT_ID` | Yes | Twitch Developer Application Client ID |
+| `TWITCH_BROADCASTER_USER_ID` | Yes | Numeric ID of the broadcaster who authorized the token |
+| `TWITCH_BROADCASTER_LOGIN` | Yes | Login of that same broadcaster |
+| `TWITCH_USER_ACCESS_TOKEN` | Yes | Broadcaster User Access Token with `user:read:chat` and `channel:read:redemptions` |
+| `TWITCH_GRAVITY_REWARD_ID` | Required for Channel Points | Exact ID of the manually created Gravity Curse reward |
+| `TWITCH_ENABLED` | Recommended | `true` |
+| `HOST` | Yes for container ingress | `0.0.0.0` |
+| `PORT` | Platform-dependent | Use the internal port Caasify assigns or configures; do not replace it with an unrelated fixed value |
+| `OVERLAY_ALLOWED_ORIGINS` | Yes for the public overlay | `https://YOUR-CAASIFY-DOMAIN` (exact origin, no trailing slash or path) |
+
+`TWITCH_BOT_USER_ID` is optional and defaults to `TWITCH_BROADCASTER_USER_ID`. `TWITCH_CLIENT_SECRET` is not required by the running backend; it is used when configuring the Twitch CLI locally. Do not add it to the container unless a separately reviewed operational need arises. The app's `.env.example` remains the reference for all supported settings.
+
+Caasify advertises a usage-price offer of €0 through December 31, 2026, with standard usage pricing resuming in 2027. Public material lists CPU, memory, storage, and outbound traffic as separately metered resources. Confirm the actual offer eligibility, selected region, resource allocation, storage/traffic charges, and account-specific terms in your Caasify dashboard before deploying; this repository cannot inspect your private account or confirm the dashboard's current balance/entitlements. See the [Caasify Docker Container Hosting page](https://caasify.com/container-hosting).
+
+### Public Socket.IO / WebSocket acceptance test
+
+Docker deployment, HTTPS, and a healthy `/health` response do not prove that the ingress forwards WebSocket upgrades. The current application uses the standard Socket.IO path `/socket.io/` on the same HTTP server as the overlay. The browser client attempts WebSocket and has HTTP long-polling available as a transport fallback.
+
+After deployment:
+
+1. Open browser developer tools on `https://YOUR-CAASIFY-DOMAIN/overlay/` and inspect the Network panel.
+2. Confirm the Socket.IO connection reaches the public hostname. Check whether the transport is `websocket` (an HTTP Upgrade request with status 101) or whether it remains on `polling` requests.
+3. If it uses polling, record that result; do not describe WebSocket as working. If the connection fails, capture the sanitized browser/network error and Caasify ingress logs.
+4. Keep the overlay open for at least 30–60 minutes. Confirm the connection remains stable and the service does not restart.
+5. Check Caasify's instance/replica history during the same interval. Confirm exactly one replica remains running and that scale-to-zero has not stopped it.
+6. Only after transport stability is established, test a real chat command, a real configured Channel Points redemption, the 30-second expiry, and overlay refresh/reconnection.
+
+**WebSocket ingress support is not yet verified for this application.** Caasify's public Docker-hosting material describes Dockerfile builds, public HTTPS domains, health checks, logs, monitoring, and replica controls, but the material reviewed does not establish Socket.IO/WebSocket upgrade behavior for this deployment. Treat the public connection test as a release gate. If WebSocket is rejected or unstable, stop and report the observed result; do not replace Socket.IO or alter the application architecture as a workaround.
+
+### Single-instance operating rule
+
+Keep this service at exactly one replica for its entire lifetime: minimum 1, maximum 1, scale-to-zero disabled. Do not add a second backend service, horizontal scaling, Redis, a database, or distributed state. Multiple instances would each own independent in-memory curse timers and could create multiple Twitch EventSub sessions.
+
 ## Project scope and known limitations
 
 This draft deliberately keeps the chosen MVP scope. It has one visual effect (Gravity Curse), no stacking/queue, one configured Channel Points reward, and no automatic redemption fulfillment. It is an OBS browser overlay rather than a reviewed Twitch Extension. The real Twitch and OBS acceptance test must be completed on the target channel before the project is described as fully verified.
