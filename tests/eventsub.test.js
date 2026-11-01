@@ -147,6 +147,37 @@ describe('EventSub WebSocket client', () => {
     client.stop();
   });
 
+  it('does not concurrently retry the same revoked subscription more than once', async () => {
+    MockSocket.instances = [];
+    let releaseRetry;
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({}) })
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseRetry = resolve; }));
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket
+    });
+    const started = client.start();
+    const socket = MockSocket.instances[0];
+    socket.sendFrame(welcome('s-duplicate-revoke'));
+    await started;
+
+    const revoke = {
+      metadata: { message_type: 'revocation' },
+      payload: { subscription: { type: 'channel.chat.message', status: 'authorization_revoked' } }
+    };
+    socket.sendFrame(revoke);
+    socket.sendFrame(revoke);
+    await tick();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    releaseRetry({ ok: true, status: 202, json: async () => ({}) });
+    await tick();
+    client.stop();
+  });
+
   it('uses Twitch reconnect URL unchanged and performs handover after welcome', async () => {
     MockSocket.instances = [];
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
