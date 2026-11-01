@@ -95,6 +95,58 @@ describe('EventSub WebSocket client', () => {
     client.stop();
   });
 
+  it('attempts both subscriptions even when one registration is rejected', async () => {
+    MockSocket.instances = [];
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new Error('chat scope rejected'))
+      .mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({}) });
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket,
+      logger
+    });
+    const started = client.start();
+    MockSocket.instances[0].sendFrame(welcome('s-partial'));
+    await expect(started).rejects.toThrow(/channel.chat.message/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith('EventSub subscription registration failed', expect.objectContaining({
+      type: 'channel.chat.message'
+    }));
+    client.stop();
+  });
+
+  it('re-registers only the revoked subscription on the active session', async () => {
+    MockSocket.instances = [];
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl,
+      WebSocketImpl: MockSocket
+    });
+    const started = client.start();
+    const socket = MockSocket.instances[0];
+    socket.sendFrame(welcome('s-revoked'));
+    await started;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    socket.sendFrame({
+      metadata: { message_type: 'revocation' },
+      payload: { subscription: { type: 'channel.chat.message', status: 'authorization_revoked' } }
+    });
+    await tick();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const [url, options] = fetchImpl.mock.calls[2];
+    expect(url).toContain('/eventsub/subscriptions');
+    expect(JSON.parse(options.body)).toMatchObject({
+      type: 'channel.chat.message',
+      transport: { method: 'websocket', session_id: 's-revoked' }
+    });
+    client.stop();
+  });
+
   it('uses Twitch reconnect URL unchanged and performs handover after welcome', async () => {
     MockSocket.instances = [];
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) });
