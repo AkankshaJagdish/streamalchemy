@@ -8,7 +8,7 @@ function notification({
   username = 'viewer_name'
 } = {}) {
   return {
-    metadata: { message_id: 'notification-envelope-id' },
+    metadata: { message_type: 'notification', subscription_type: 'channel.chat.message', message_id: 'notification-envelope-id' },
     payload: {
       event: {
         message_id: id,
@@ -22,7 +22,7 @@ function notification({
 
 describe('createChatHandler', () => {
   it('forwards a valid Twitch chat command as a structured request', async () => {
-    const activateCurse = vi.fn();
+    const activateCurse = vi.fn().mockResolvedValue({ activated: true });
     const handle = createChatHandler({ activateCurse });
 
     const result = await handle(notification());
@@ -64,7 +64,7 @@ describe('createChatHandler', () => {
   });
 
   it('prevents duplicate EventSub event IDs from activating twice', async () => {
-    const activateCurse = vi.fn();
+    const activateCurse = vi.fn().mockResolvedValue({ activated: true });
     const handle = createChatHandler({ activateCurse });
 
     const first = await handle(notification());
@@ -78,7 +78,7 @@ describe('createChatHandler', () => {
   it('deduplicates concurrent deliveries by message ID', async () => {
     let finishActivation;
     const activateCurse = vi.fn(() => new Promise((resolve) => {
-      finishActivation = resolve;
+      finishActivation = () => resolve({ activated: true });
     }));
     const handle = createChatHandler({ activateCurse });
 
@@ -129,11 +129,11 @@ describe('createChatHandler', () => {
 
     expect(await handle({})).toEqual({
       handled: false,
-      reason: 'invalid-notification'
+      reason: 'not-a-notification'
     });
-    expect(await handle({ payload: { event: {} } })).toEqual({
+    expect(await handle({ metadata: { message_type: 'notification', subscription_type: 'channel.chat.message' }, payload: { event: {} } })).toEqual({
       handled: false,
-      reason: 'missing-message-id'
+      reason: 'invalid-notification'
     });
   });
 
