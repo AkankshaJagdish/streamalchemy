@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { io as createSocketClient } from 'socket.io-client';
 import { createApplication, startApplicationServer } from '../src/server.js';
 import { createCurseEngine } from '../src/engine/curseEngine.js';
 
@@ -10,6 +11,19 @@ function makeEngine() {
     subscribe: vi.fn(() => vi.fn()),
     subscribeEvents: vi.fn(() => vi.fn())
   };
+}
+
+function connectAndReadState(socket) {
+  const connected = new Promise((resolve, reject) => {
+    socket.once('connect', resolve);
+    socket.once('connect_error', reject);
+  });
+  const state = new Promise((resolve, reject) => {
+    socket.once('curse:state', resolve);
+    socket.once('connect_error', reject);
+  });
+  socket.connect();
+  return Promise.all([connected, state]).then(([, snapshot]) => snapshot);
 }
 
 describe('application lifecycle', () => {
@@ -53,20 +67,25 @@ describe('application lifecycle', () => {
     expect(engine.shutdown).toHaveBeenCalledOnce();
   });
 
-  it('starts the real overlay server and serves health and browser assets', async () => {
+  it('binds to 0.0.0.0, respects PORT, serves health/assets, and communicates over WebSocket and polling', async () => {
     const engine = createCurseEngine();
     const app = await createApplication({
       env: {
         TWITCH_ENABLED: 'false',
-        HOST: '127.0.0.1',
+        PORT: '0',
+        HOST: '0.0.0.0',
         OVERLAY_ALLOWED_ORIGINS: 'http://127.0.0.1'
       },
       engine
     });
-    let address;
+    let websocketClient;
+    let pollingClient;
     try {
-      address = await app.listen(0, '127.0.0.1');
+      const address = await app.listen();
+      expect(address.address).toBe('0.0.0.0');
+      expect(address.port).toBeGreaterThan(0);
       const base = `http://127.0.0.1:${address.port}`;
+
       const health = await fetch(`${base}/health`);
       expect(health.status).toBe(200);
       await expect(health.json()).resolves.toEqual({ ok: true });
@@ -78,10 +97,38 @@ describe('application lifecycle', () => {
       expect(html).toContain('/socket.io/socket.io.js');
       expect(html).toContain('/overlay/overlay.js');
 
-      const script = await fetch(`${base}/overlay/overlay.js`);
-      expect(script.status).toBe(200);
-      expect(await script.text()).toContain('curse:state');
+      for (const asset of ['style.css', 'animations.css', 'overlay.js']) {
+        const response = await fetch(`${base}/overlay/${asset}`);
+        expect(response.status).toBe(200);
+      }
+
+      websocketClient = createSocketClient(base, {
+        autoConnect: false, reconnection: false, timeout: 3000, transports: ['websocket']
+      });
+      const initialState = await connectAndReadState(websocketClient);
+      expect(initialState).toEqual({ state: 'idle', effect: null });
+
+      const activation = new Promise((resolve) => websocketClient.once('curse:activated', resolve));
+      const result = engine.activate({ curse: 'gravity', source: 'twitch-chat' });
+      expect(result.activated).toBe(true);
+      await expect(activation).resolves.toMatchObject({
+        id: 'gravity', name: 'Gravity Curse', expiresAt: result.effect.expiresAt
+      });
+
+      pollingClient = createSocketClient(base, {
+        autoConnect: false, reconnection: false, timeout: 3000, transports: ['polling']
+      });
+      const restoredState = await connectAndReadState(pollingClient);
+      expect(restoredState).toMatchObject({
+        state: 'active',
+        effect: {
+          id: 'gravity',
+          expiresAt: result.effect.expiresAt
+        }
+      });
     } finally {
+      websocketClient?.disconnect();
+      pollingClient?.disconnect();
       app.close();
     }
   });
