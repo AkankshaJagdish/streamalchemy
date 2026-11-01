@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EventEmitter } from 'node:events';
-import { createApplication } from '../src/server.js';
+import { describe, expect, it, vi } from 'vitest';
+import { createApplication, startApplicationServer } from '../src/server.js';
 
 function makeEngine() {
   return {
@@ -13,7 +12,7 @@ function makeEngine() {
 }
 
 describe('application lifecycle', () => {
-  it('closes Twitch, overlay and engine if the HTTP listener fails after Twitch startup', async () => {
+  it('closes Twitch and overlay if the HTTP listener fails after Twitch startup', async () => {
     const engine = makeEngine();
     const twitch = { dispose: vi.fn(), stop: vi.fn() };
     const overlay = {
@@ -28,11 +27,11 @@ describe('application lifecycle', () => {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     });
 
-    await expect(app.listen()).rejects.toThrow('EADDRINUSE');
-
-    // main() owns the cleanup of a failed listen. Exercise the same cleanup
-    // contract through the returned application handle.
-    app.close();
+    await expect(startApplicationServer({
+      application: app,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      processImpl: { once: vi.fn(), exitCode: undefined }
+    })).rejects.toThrow('EADDRINUSE');
     expect(twitch.dispose).toHaveBeenCalledOnce();
     expect(overlay.close).toHaveBeenCalledOnce();
     expect(engine.shutdown).not.toHaveBeenCalled();
