@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApplication, startApplicationServer } from '../src/server.js';
+import { createCurseEngine } from '../src/engine/curseEngine.js';
 
 function makeEngine() {
   return {
@@ -50,6 +51,39 @@ describe('application lifecycle', () => {
 
     expect(overlay.close).toHaveBeenCalledOnce();
     expect(engine.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('starts the real overlay server and serves health and browser assets', async () => {
+    const engine = createCurseEngine();
+    const app = await createApplication({
+      env: {
+        TWITCH_ENABLED: 'false',
+        HOST: '127.0.0.1',
+        OVERLAY_ALLOWED_ORIGINS: 'http://127.0.0.1'
+      },
+      engine
+    });
+    let address;
+    try {
+      address = await app.listen(0, '127.0.0.1');
+      const base = `http://127.0.0.1:${address.port}`;
+      const health = await fetch(`${base}/health`);
+      expect(health.status).toBe(200);
+      await expect(health.json()).resolves.toEqual({ ok: true });
+
+      const overlay = await fetch(`${base}/overlay/`);
+      expect(overlay.status).toBe(200);
+      const html = await overlay.text();
+      expect(html).toContain('StreamAlchemy — Gravity Curse Overlay');
+      expect(html).toContain('/socket.io/socket.io.js');
+      expect(html).toContain('/overlay/overlay.js');
+
+      const script = await fetch(`${base}/overlay/overlay.js`);
+      expect(script.status).toBe(200);
+      expect(await script.text()).toContain('curse:state');
+    } finally {
+      app.close();
+    }
   });
 
   it('shuts down the engine in overlay-only mode', () => {
