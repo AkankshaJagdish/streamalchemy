@@ -42,7 +42,7 @@ async function main() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(`file://${process.argv[1]}`))) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(process.argv[1])) {
   main().catch((error) => {
     logger.error('StreamAlchemy startup failed', { message: error.message });
     process.exitCode = 1;
