@@ -3,18 +3,12 @@ import { parseCurseCommand } from '../engine/commandParser.js';
 const MAX_SEEN_MESSAGE_IDS = 10_000;
 
 /**
- * Creates an EventSub chat message processor.
- *
- * Expected input is an EventSub notification envelope with
- * payload.event.message_id, payload.event.chatter_user_id,
- * payload.event.chatter_user_name and payload.event.message.text.
- *
- * The parser itself does not know about Twitch. This adapter extracts the
- * Twitch-specific fields and forwards only a validated, structured request.
+ * Creates an EventSub chat message processor. Accepts the full EventSub
+ * WebSocket notification envelope; it does not inspect raw socket frames.
  *
  * @param {object} options
  * @param {(request: object) => unknown | Promise<unknown>} options.activateCurse
- * @param {(message: object) => void} [options.onError]
+ * @param {(error: Error) => void} [options.onError]
  */
 export function createChatHandler({
   activateCurse,
@@ -30,6 +24,15 @@ export function createChatHandler({
   const seenMessageIds = new Set();
 
   return async function handleChatNotification(notification) {
+    if (notification?.metadata?.message_type !== 'notification') {
+      return { handled: false, reason: 'not-a-notification' };
+    }
+    const subscriptionType =
+      notification.metadata.subscription_type ?? notification.payload?.subscription?.type;
+    if (subscriptionType !== 'channel.chat.message') {
+      return { handled: false, reason: 'not-a-chat-message' };
+    }
+
     const event = notification?.payload?.event;
     if (!event || typeof event !== 'object') {
       return { handled: false, reason: 'invalid-notification' };
@@ -44,32 +47,21 @@ export function createChatHandler({
       return { handled: false, reason: 'duplicate' };
     }
 
-    // Record the ID before processing to prevent concurrent duplicate
-    // notifications from triggering the same activation twice.
     seenMessageIds.add(messageId);
     if (seenMessageIds.size > MAX_SEEN_MESSAGE_IDS) {
-      const oldest = seenMessageIds.values().next().value;
-      seenMessageIds.delete(oldest);
+      seenMessageIds.delete(seenMessageIds.values().next().value);
     }
 
-    const messageText = event.message?.text;
-    const parsed = parseCurseCommand(messageText);
+    const parsed = parseCurseCommand(event.message?.text);
     if (!parsed.ok) {
-      return {
-        handled: true,
-        activated: false,
-        reason: parsed.reason
-      };
+      return { handled: true, activated: false, reason: parsed.reason };
     }
 
     const viewerId = event.chatter_user_id;
     const username = event.chatter_user_name;
-
     if (
-      typeof viewerId !== 'string' ||
-      viewerId.length === 0 ||
-      typeof username !== 'string' ||
-      username.length === 0
+      typeof viewerId !== 'string' || viewerId.length === 0 ||
+      typeof username !== 'string' || username.length === 0
     ) {
       return { handled: true, activated: false, reason: 'invalid-viewer' };
     }
@@ -78,10 +70,7 @@ export function createChatHandler({
       ...parsed.request,
       source: 'twitch-chat',
       eventId: messageId,
-      viewer: Object.freeze({
-        id: viewerId,
-        username
-      })
+      viewer: Object.freeze({ id: viewerId, username })
     });
 
     try {
