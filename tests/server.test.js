@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { io as createSocketClient } from 'socket.io-client';
 import { createApplication, startApplicationServer } from '../src/server.js';
 import { createCurseEngine } from '../src/engine/curseEngine.js';
