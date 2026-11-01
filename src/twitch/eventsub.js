@@ -68,6 +68,20 @@ export function createEventSubClient({
     }, timeoutSeconds * 1000);
   }
 
+  async function registerSubscription(subscription) {
+    const result = await createEventSubSubscription({
+      clientId: config.clientId,
+      accessToken: config.accessToken,
+      subscription,
+      fetchImpl
+    });
+    logger.info('EventSub subscription registered', {
+      type: subscription.type,
+      created: result.created
+    });
+    return result;
+  }
+
   async function registerSubscriptions(sessionId) {
     const subscriptions = buildEventSubSubscriptions({
       broadcasterUserId: config.broadcasterUserId,
@@ -75,22 +89,29 @@ export function createEventSubClient({
       sessionId
     });
 
-    // Twitch's default deadline is 10 seconds after Welcome. Send requests
-    // concurrently so both registration attempts begin immediately.
-    const results = await Promise.all(subscriptions.map((subscription) =>
-      createEventSubSubscription({
-        clientId: config.clientId,
-        accessToken: config.accessToken,
-        subscription,
-        fetchImpl
-      })
-    ));
-    results.forEach((result, index) => {
-      logger.info('EventSub subscription registered', {
-        type: subscriptions[index].type,
-        created: result.created
+    // Keep both registration attempts independent. A failed chat subscription
+    // must not prevent Channel Points from registering (or vice versa).
+    const results = await Promise.allSettled(subscriptions.map(registerSubscription));
+    const failures = results
+      .map((result, index) => ({ result, subscription: subscriptions[index] }))
+      .filter(({ result }) => result.status === 'rejected');
+    failures.forEach(({ result, subscription }) => {
+      logger.error('EventSub subscription registration failed', {
+        type: subscription.type,
+        message: result.reason?.message ?? 'Unknown Twitch API error'
       });
     });
+    if (failures.length) {
+      const error = new Error(
+        `EventSub subscription registration failed for: ${failures.map(({ subscription }) => subscription.type).join(', ')}`
+      );
+      error.failures = failures.map(({ subscription, result }) => ({
+        type: subscription.type,
+        message: result.reason?.message ?? 'Unknown Twitch API error'
+      }));
+      throw error;
+    }
+    return subscriptions;
   }
 
   function scheduleFreshConnection() {
@@ -226,6 +247,21 @@ export function createEventSubClient({
             status: subscription?.status
           });
           onRevocation(subscription, message);
+          if (socket === activeSocket && subscription?.type && activeSessionId) {
+            const replacement = buildEventSubSubscriptions({
+              broadcasterUserId: config.broadcasterUserId,
+              botUserId: config.botUserId ?? config.broadcasterUserId,
+              sessionId: activeSessionId
+            }).find((candidate) => candidate.type === subscription.type);
+            if (replacement) {
+              registerSubscription(replacement).catch((error) => {
+                logger.error('EventSub revoked subscription recovery failed', {
+                  type: subscription.type,
+                  message: error.message
+                });
+              });
+            }
+          }
         }
       });
 
