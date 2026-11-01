@@ -28,6 +28,7 @@ export function createCurseEngine({
   let expirationTimer = null;
   let shutdown = false;
   let lastTransition = null;
+  const eventListeners = new Set();
 
   function emit(type, effect) {
     const event = Object.freeze({
@@ -37,10 +38,17 @@ export function createCurseEngine({
       timestamp: now()
     });
     lastTransition = event;
+    for (const listener of [...eventListeners]) {
+      try {
+        listener(event);
+      } catch (error) {
+        logger?.error?.('Curse Engine event listener failed', { message: error.message });
+      }
+    }
     try {
       onEvent(event);
     } catch (error) {
-      logger?.error?.('Curse Engine event listener failed', { message: error.message });
+      logger?.error?.('Curse Engine event callback failed', { message: error.message });
     }
     return event;
   }
@@ -124,11 +132,17 @@ export function createCurseEngine({
     clearExpirationTimer();
     cooldown.clear();
     stateManager.reset();
+    eventListeners.clear();
   }
 
   return Object.freeze({
     activate,
     subscribe: stateManager.subscribe,
+    subscribeEvents(listener) {
+      if (typeof listener !== 'function') throw new TypeError('Event subscriber must be a function');
+      eventListeners.add(listener);
+      return () => eventListeners.delete(listener);
+    },
     getSnapshot: stateManager.getSnapshot,
     getState: stateManager.getState,
     getActiveEffect: stateManager.getActiveEffect,
