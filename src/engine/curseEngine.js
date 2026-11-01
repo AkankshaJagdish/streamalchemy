@@ -11,25 +11,11 @@ function createDefaultTimer() {
   };
 }
 
-/**
- * Central, Twitch-independent Curse Engine.
- *
- * API:
- *   const engine = createCurseEngine({ onEvent });
- *   engine.activate({ curse: 'gravity', source: 'twitch-chat' });
- *   engine.getSnapshot();
- *   const unsubscribe = engine.subscribe(listener);
- *   engine.shutdown();
- *
- * Duplicate activations while ACTIVE return { activated:false,
- * reason:'already-active' } and do not change start/expiry/timer.
- */
 export function createCurseEngine({
   now = Date.now,
   timer = createDefaultTimer(),
   stateManager = createStateManager(),
   onEvent = () => {},
-  idFactory = (curse) => curse,
   logger = null
 } = {}) {
   if (typeof now !== 'function') throw new TypeError('now must be a function');
@@ -37,7 +23,6 @@ export function createCurseEngine({
     throw new TypeError('timer must provide setTimeout and clearTimeout');
   }
   if (typeof onEvent !== 'function') throw new TypeError('onEvent must be a function');
-  if (typeof idFactory !== 'function') throw new TypeError('idFactory must be a function');
 
   const cooldown = createCooldownManager({ now });
   let expirationTimer = null;
@@ -81,36 +66,25 @@ export function createCurseEngine({
   }
 
   function activate(request) {
-    if (shutdown) {
-      return { activated: false, reason: 'engine-shutdown' };
-    }
+    if (shutdown) return { activated: false, reason: 'engine-shutdown' };
     if (!request || typeof request !== 'object') {
       return { activated: false, reason: 'invalid-request' };
     }
 
-    const curseName = typeof request.curse === 'string'
-      ? request.curse.toLowerCase()
-      : '';
+    const curseName = typeof request.curse === 'string' ? request.curse.toLowerCase() : '';
     const definition = getCurseDefinition(curseName);
-    if (!definition) {
-      return { activated: false, reason: 'unsupported-curse' };
-    }
+    if (!definition) return { activated: false, reason: 'unsupported-curse' };
 
     if (request.durationMs !== undefined && request.durationMs !== definition.durationMs) {
       return { activated: false, reason: 'invalid-duration' };
     }
-
     if (request.source !== undefined && !VALID_SOURCES.has(request.source)) {
       return { activated: false, reason: 'invalid-source' };
     }
 
     const current = stateManager.getActiveEffect();
     if (current || cooldown.isActive()) {
-      return {
-        activated: false,
-        reason: 'already-active',
-        activeEffect: current
-      };
+      return { activated: false, reason: 'already-active', activeEffect: current };
     }
 
     const startedAt = now();
@@ -127,30 +101,21 @@ export function createCurseEngine({
       expiresAt
     });
 
+    let stateWasSet = false;
     try {
-      cooldown.start(expiresAt);
       stateManager.setActive(effect);
-      expirationTimer = timer.setTimeout(
-        () => expire(effect.id),
-        definition.durationMs
-      );
+      stateWasSet = true;
+      expirationTimer = timer.setTimeout(() => expire(effect.id), definition.durationMs);
+      cooldown.start(expiresAt);
       emit('activated', effect);
-      return {
-        activated: true,
-        effect,
-        snapshot: stateManager.getSnapshot()
-      };
+      return { activated: true, effect, snapshot: stateManager.getSnapshot() };
     } catch (error) {
       clearExpirationTimer();
       cooldown.clear();
-      stateManager.reset();
+      if (stateWasSet) stateManager.reset();
       logger?.error?.('Curse Engine activation failed', { message: error.message });
       return { activated: false, reason: 'activation-failed' };
     }
-  }
-
-  function subscribe(listener) {
-    return stateManager.subscribe(listener);
   }
 
   function shutdownEngine() {
@@ -163,7 +128,7 @@ export function createCurseEngine({
 
   return Object.freeze({
     activate,
-    subscribe,
+    subscribe: stateManager.subscribe,
     getSnapshot: stateManager.getSnapshot,
     getState: stateManager.getState,
     getActiveEffect: stateManager.getActiveEffect,

@@ -1,13 +1,21 @@
 import { loadConfig } from '../config.js';
 import { validateConfiguredTwitchAuth } from './auth.js';
-import { createEventSubClient, parseEventSubMessage } from './eventsub.js';
+import { createEventSubClient } from './eventsub.js';
 import { createChatHandler } from './chatHandler.js';
 import { createCurseEngine } from '../engine/curseEngine.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 
 const TOKEN_REVALIDATION_INTERVAL_MS = 60 * 60 * 1000;
 
-function createRedemptionHandler({ activateCurse, onError = () => {} }) {
+export function createRedemptionHandler({
+  activateCurse,
+  onRedemption = async () => {},
+  onError = () => {}
+}) {
+  if (typeof activateCurse !== 'function') {
+    throw new TypeError('activateCurse must be a function');
+  }
+
   return async function handleRedemption(notification) {
     if (notification?.metadata?.message_type !== 'notification') {
       return { handled: false, reason: 'not-a-notification' };
@@ -22,6 +30,9 @@ function createRedemptionHandler({ activateCurse, onError = () => {} }) {
     if (!event || typeof event !== 'object' || typeof event.id !== 'string') {
       return { handled: false, reason: 'invalid-redemption' };
     }
+
+    // Match the designated reward by title. No viewer-provided fields are
+    // interpreted as code or used to select an arbitrary curse.
     const rewardTitle = event.reward?.title;
     if (typeof rewardTitle !== 'string' || rewardTitle.trim().toLowerCase() !== 'gravity curse') {
       return { handled: true, activated: false, reason: 'unsupported-reward' };
@@ -37,6 +48,7 @@ function createRedemptionHandler({ activateCurse, onError = () => {} }) {
           username: event.user_login ?? event.user_name ?? 'unknown'
         }
       });
+      await onRedemption(notification, result);
       return { handled: true, ...result };
     } catch (error) {
       onError(error);
@@ -45,12 +57,6 @@ function createRedemptionHandler({ activateCurse, onError = () => {} }) {
   };
 }
 
-/**
- * Startup boundary for Stages 1–3.
- *
- * Both chat and redemption input paths call the same Curse Engine activate()
- * method. The engine remains independent from Twitch and the overlay.
- */
 export async function startTwitchIntegration({
   env = process.env,
   fetchImpl = fetch,
@@ -80,29 +86,20 @@ export async function startTwitchIntegration({
     return result;
   };
 
-  const activateFromChat = (request) =>
-    reportEngineResult(engine.activate(request), 'twitch-chat');
-
-  const activateFromRedemption = async (request) => {
-    const result = await redemptionHandler(request);
-    return result;
-  };
+  // This exact same engine method handles both Twitch input sources.
+  const activateFromTwitch = (request) =>
+    reportEngineResult(engine.activate(request), request.source);
 
   const handleChatMessage = createChatHandler({
-    activateCurse: activateFromChat,
+    activateCurse: activateFromTwitch,
     onError: (error) => logger.error('Chat command processing failed', { message: error.message })
   });
 
-  const redemptionHandler = createRedemptionHandler({
-    activateCurse: (request) => reportEngineResult(engine.activate(request), 'channel-points'),
+  const handleRedemption = createRedemptionHandler({
+    activateCurse: activateFromTwitch,
+    onRedemption,
     onError: (error) => logger.error('Redemption processing failed', { message: error.message })
   });
-
-  const handleRedemption = async (notification) => {
-    const result = await redemptionHandler(notification);
-    if (result.handled && result.activated) onRedemption(notification, result);
-    return result;
-  };
 
   const eventSub = createEventSubClient({
     config,
