@@ -181,7 +181,9 @@ describe('EventSub WebSocket client', () => {
     MockSocket.instances[0].sendFrame(welcome('s-old'));
     await started;
     MockSocket.instances[0].close(1006, 'network lost');
-    timers.find((fn) => typeof fn === 'function')();
+    const reconnectTimer = timers.find((fn, index) => index > 0);
+    expect(reconnectTimer).toBeTypeOf('function');
+    reconnectTimer();
     await tick();
     const fresh = MockSocket.instances[1];
     fresh.sendFrame(welcome('s-fresh'));
