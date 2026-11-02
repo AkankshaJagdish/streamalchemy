@@ -152,6 +152,8 @@ describe('OBS browser overlay', () => {
     expect(video.src).toBe('/overlay/assets/rickroll.mp4');
     expect(video.loop).toBe(false);
     expect(video.muted).toBe(false);
+    expect(video.autoplay).toBe(false);
+    video.listeners.loadedmetadata();
     expect(video.playCalls).toBe(1);
     now = 17_000; ui.tick();
     expect(video.paused).toBe(true);
@@ -189,6 +191,8 @@ describe('OBS browser overlay', () => {
     const ui = createHarness();
     ui.setVideoPlayResult(Promise.reject(new Error('autoplay blocked')));
     ui.fire('curse:activated', effect());
+    const video = ui.elements['rickroll-video-layer'].children.find((child) => child.tagName === 'video');
+    video.listeners.loadedmetadata();
     await Promise.resolve(); await Promise.resolve();
     expect(ui.window.StreamAlchemyOverlay.getVideoState().failed).toBe(true);
     expect(ui.elements['rickroll-video-layer'].classList.contains('is-fallback')).toBe(true);
