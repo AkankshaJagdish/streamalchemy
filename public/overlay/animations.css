@@ -1,13 +1,20 @@
 /* Effects are transform/opacity-only so the overlay stays inexpensive in OBS. */
+.overlay.is-active {
+  animation: gravity-camera 7.6s ease-in-out infinite;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
 .overlay.is-active .curse-card {
   border-color: rgb(196 181 253 / 72%);
   box-shadow: 0 18px 70px rgb(0 0 0 / 35%), 0 0 48px rgb(139 92 246 / 24%), inset 0 1px 0 rgb(255 255 255 / 12%);
-  animation: card-arrive 650ms cubic-bezier(.2,.75,.2,1) both, card-pulse 4.5s ease-in-out 650ms infinite;
+  animation: card-arrive 650ms cubic-bezier(.2,.75,.2,1) both, card-pulse 4.5s ease-in-out 650ms infinite, card-chaos 5.2s ease-in-out 650ms infinite;
 }
 .overlay.is-active .ambient, .overlay.is-active .gravity-field { opacity: 1; }
 .overlay.is-active .emblem-ring { animation: ring-turn 13s linear infinite; }
 .overlay.is-active .ring-inner { animation-direction: reverse; animation-duration: 9s; }
 .overlay.is-active .emblem-core { animation: core-float 2.8s ease-in-out infinite; }
+.overlay.is-active .curse-main { animation: copy-bounce 3.7s ease-in-out infinite; }
+.overlay.is-active .timer-value { animation: timer-jiggle 1.8s ease-in-out infinite; }
 .overlay.is-active .status-dot { background: #c4b5fd; box-shadow: 0 0 10px #a78bfa; animation: signal 1.3s ease-in-out infinite; }
 .overlay.is-active .particle { animation: rise 5.5s linear infinite; }
 .overlay.is-active .particle-1 { left: 13%; bottom: 8%; animation-delay: -.7s; }
@@ -43,3 +50,41 @@
 .overlay.is-idle .curse-emblem { opacity: .72; }
 .overlay.is-idle .gravity-field { opacity: 0; }
 .overlay.is-idle .status-dot { background: #6ee7b7; }
+
+
+/* Short, irregular camera nudges keep the game readable between bursts. */
+@keyframes gravity-camera {
+  0%, 18%, 21%, 47%, 50%, 76%, 79%, 100% { transform: translate3d(0, 0, 0) rotate(0); }
+  19% { transform: translate3d(-3px, 1px, 0) rotate(-.22deg); }
+  20% { transform: translate3d(3px, -2px, 0) rotate(.28deg); }
+  48% { transform: translate3d(2px, 2px, 0) rotate(.18deg); }
+  49% { transform: translate3d(-2px, -1px, 0) rotate(-.2deg); }
+  77% { transform: translate3d(-3px, 1px, 0) rotate(-.24deg); }
+  78% { transform: translate3d(2px, -2px, 0) rotate(.2deg); }
+}
+@keyframes card-chaos {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  8% { transform: rotate(-1.2deg) translateY(-2px); }
+  13% { transform: rotate(1deg) translateY(1px); }
+  18%, 58% { transform: rotate(0deg) translateY(0); }
+  62% { transform: rotate(.7deg) translateY(-1px); }
+  67% { transform: rotate(-.6deg) translateY(1px); }
+}
+@keyframes copy-bounce {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  38% { transform: translateY(-3px) rotate(-.4deg); }
+  44% { transform: translateY(1px) rotate(.35deg); }
+}
+@keyframes timer-jiggle {
+  0%, 88%, 100% { transform: rotate(0) scale(1); }
+  90% { transform: rotate(-2deg) scale(1.04); }
+  93% { transform: rotate(2deg) scale(1.04); }
+  96% { transform: rotate(-1deg) scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay.is-active, .overlay.is-active .curse-card,
+  .overlay.is-active .curse-main, .overlay.is-active .timer-value {
+    animation: none !important;
+    transform: none !important;
+  }
+}

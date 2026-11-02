@@ -125,3 +125,63 @@ h1 { margin: 7px 0 4px; color: #f8f5ff; font-size: clamp(25px, 4.2vw, 42px); fon
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+
+/* Cartoon gravity-disaster layer: transparent, pointer-free, and transform-only. */
+.chaos-layer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 180ms ease, visibility 180ms step-end;
+}
+.overlay.is-active .chaos-layer {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 180ms ease;
+}
+.chaos-object {
+  position: absolute;
+  display: block;
+  left: var(--left);
+  top: var(--top);
+  font-size: var(--size);
+  line-height: 1;
+  opacity: 0;
+  filter: drop-shadow(0 3px 5px rgb(0 0 0 / 28%));
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+.overlay.is-active .chaos-object {
+  animation: chaos-flight var(--speed) cubic-bezier(.36,.02,.62,.98) var(--delay) infinite alternate;
+}
+.object-star { --left: 5%; --top: 16%; --size: 34px; --speed: 4.8s; --delay: -.8s; --dx: 54px; --dy: 78px; }
+.object-pizza { --left: 14%; --top: 72%; --size: 42px; --speed: 6.2s; --delay: -3.4s; --dx: 82px; --dy: -112px; }
+.object-keyboard { --left: 29%; --top: 9%; --size: 38px; --speed: 7.4s; --delay: -1.9s; --dx: -62px; --dy: 112px; }
+.object-pad { --left: 83%; --top: 16%; --size: 44px; --speed: 5.5s; --delay: -2.2s; --dx: -92px; --dy: 126px; }
+.object-question { --left: 92%; --top: 57%; --size: 36px; --speed: 4.2s; --delay: -1.1s; --dx: -76px; --dy: -92px; }
+.object-donut { --left: 72%; --top: 78%; --size: 38px; --speed: 6.8s; --delay: -4.6s; --dx: 58px; --dy: -130px; }
+.object-spark { --left: 48%; --top: 5%; --size: 31px; --speed: 4.6s; --delay: -2.8s; --dx: 68px; --dy: 100px; }
+.object-cat { --left: 4%; --top: 48%; --size: 40px; --speed: 7.1s; --delay: -4s; --dx: 102px; --dy: -74px; }
+.object-fries { --left: 88%; --top: 83%; --size: 36px; --speed: 5.1s; --delay: -2.5s; --dx: -104px; --dy: -118px; }
+.object-key { --left: 38%; --top: 83%; --size: 30px; --speed: 6.4s; --delay: -5.2s; --dx: 66px; --dy: -88px; }
+.object-star-two { --left: 62%; --top: 13%; --size: 29px; --speed: 5.8s; --delay: -3.1s; --dx: -80px; --dy: 90px; }
+.object-taco { --left: 20%; --top: 28%; --size: 35px; --speed: 7.6s; --delay: -1.4s; --dx: 88px; --dy: 136px; }
+.object-bolt { --left: 96%; --top: 31%; --size: 31px; --speed: 4.9s; --delay: -3.7s; --dx: -108px; --dy: 96px; }
+.object-mushroom { --left: 77%; --top: 42%; --size: 37px; --speed: 6.7s; --delay: -2s; --dx: -92px; --dy: 112px; }
+.object-question-two { --left: 10%; --top: 88%; --size: 27px; --speed: 5.6s; --delay: -4.3s; --dx: 116px; --dy: -102px; }
+.object-game { --left: 55%; --top: 88%; --size: 34px; --speed: 7.2s; --delay: -1.7s; --dx: -72px; --dy: -124px; }
+.object-cookie { --left: 34%; --top: 45%; --size: 32px; --speed: 5.9s; --delay: -3.8s; --dx: 76px; --dy: -120px; }
+.object-satellite { --left: 68%; --top: 60%; --size: 39px; --speed: 8s; --delay: -5.1s; --dx: 92px; --dy: -86px; }
+@keyframes chaos-flight {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(-24deg) scale(.62); }
+  14% { opacity: .88; }
+  52% { opacity: .96; transform: translate3d(var(--dx), var(--dy), 0) rotate(155deg) scale(1.08); }
+  100% { opacity: .12; transform: translate3d(calc(var(--dx) * -.35), calc(var(--dy) * -.42), 0) rotate(330deg) scale(.78); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay.is-active .chaos-object { animation: none; opacity: .42; }
+}
