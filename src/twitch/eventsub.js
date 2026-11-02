@@ -112,12 +112,20 @@ export function createEventSubClient({
   }
 
   async function registerSubscriptions(sessionId) {
+    const channelPointsEnabled = config.channelPointsEnabled !== false;
     const subscriptions = buildEventSubSubscriptions({
       broadcasterUserId: config.broadcasterUserId,
       botUserId: config.botUserId ?? config.broadcasterUserId,
       sessionId,
-      channelPointsEnabled: config.channelPointsEnabled !== false
+      channelPointsEnabled
     });
+    logger.info('EventSub subscriptions selected', {
+      channelPointsEnabled,
+      types: subscriptions.map(({ type }) => type)
+    });
+    if (!channelPointsEnabled) {
+      logger.warn('Channel Points EventSub subscription disabled by TWITCH_CHANNEL_POINTS_ENABLED=false');
+    }
 
     // Keep both registration attempts independent. A failed chat subscription
     // must not prevent Channel Points from registering (or vice versa).
