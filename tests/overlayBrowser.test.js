@@ -42,7 +42,9 @@ function createHarness() {
   const document = {
     getElementById: (id) => elements[id],
     createElement: (tag) => makeElement(tag),
-    createTextNode: (text) => ({ textContent: String(text) })
+    createTextNode: (text) => ({ textContent: String(text) }),
+    addEventListener: vi.fn(),
+    hidden: false
   };
   vm.runInNewContext(script, { window, document, Date, Number, Boolean, Math });
   return {
