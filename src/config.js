@@ -65,7 +65,7 @@ export function loadConfig(env = process.env) {
   }
 
   const eventSubUrl = eventSubMode === 'mock'
-    ? validateMockWebSocketUrl(String(env.TWITCH_EVENTSUB_WS_URL ?? DEFAULT_MOCK_EVENTSUB_URL).trim())
+    ? validateMockWebSocketUrl(String(env.TWITCH_EVENTSUB_WS_URL ?? '').trim() || DEFAULT_MOCK_EVENTSUB_URL)
     : 'wss://eventsub.wss.twitch.tv/ws';
 
   return Object.freeze({
