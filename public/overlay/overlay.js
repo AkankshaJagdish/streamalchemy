@@ -49,7 +49,7 @@
       videoElement = video;
       video.src = '/overlay/assets/rickroll.mp4';
       video.preload = 'auto';
-      video.autoplay = true;
+      video.autoplay = false;
       video.loop = false;
       video.muted = false;
       video.playsInline = true;
@@ -62,6 +62,13 @@
       video.addEventListener('loadedmetadata', () => {
         if (videoElement !== video) return;
         try { video.currentTime = Math.max(0, Math.min(8.95, elapsedMs / 1000)); } catch {}
+        const playResult = video.play();
+        if (playResult && typeof playResult.catch === 'function') {
+          playResult.catch(() => {
+            if (videoElement !== video) return;
+            failVideo('PLAYBACK BLOCKED — YOU STILL GOT RICKROLLED.');
+          });
+        }
       });
       video.addEventListener('playing', () => {
         if (videoElement === video && videoLayer) videoLayer.classList.remove('is-fallback');
@@ -72,13 +79,6 @@
         showVideoFallback("YOU'VE BEEN RICKROLLED.");
       });
       videoLayer.append(video);
-      const playResult = video.play();
-      if (playResult && typeof playResult.catch === 'function') {
-        playResult.catch(() => {
-          if (videoElement !== video) return;
-          failVideo('PLAYBACK BLOCKED — YOU STILL GOT RICKROLLED.');
-        });
-      }
     } catch {
       failVideo('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
     }
