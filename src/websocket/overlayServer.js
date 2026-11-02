@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import express from 'express';
+import { fileURLToPath } from 'node:url';
 import { OVERLAY_EVENTS, createActivationPayload, createExpirationPayload, createStatePayload } from './overlayEvents.js';
 
 const DEFAULT_ALLOWED_ORIGINS = Object.freeze([
@@ -22,10 +23,12 @@ export function createOverlayServer({
   }
   const origins = normalizeOrigins(allowedOrigins);
   app.disable('x-powered-by');
-  app.use('/overlay', express.static(new URL('../../public/overlay', import.meta.url).pathname, {
+  const overlayDirectory = fileURLToPath(new URL('../../public/overlay/', import.meta.url));
+  const publicDirectory = fileURLToPath(new URL('../../public/', import.meta.url));
+  app.use('/overlay', express.static(overlayDirectory, {
     dotfiles: 'deny', index: 'index.html'
   }));
-  app.use(express.static(new URL('../../public', import.meta.url).pathname, {
+  app.use(express.static(publicDirectory, {
     dotfiles: 'deny', index: 'index.html', fallthrough: true
   }));
   app.get('/health', (_req, res) => res.json({ ok: true }));
