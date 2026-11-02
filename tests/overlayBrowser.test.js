@@ -75,6 +75,7 @@ describe('OBS browser overlay', () => {
     const ui = createHarness();
     ui.fire('curse:activated', effect());
     expect(ui.elements['streamalchemy-overlay'].classList.contains('is-active')).toBe(true);
+    expect(ui.elements['streamalchemy-overlay'].classList.contains('is-idle')).toBe(false);
     expect(ui.elements['curse-title'].textContent).toBe('Gravity Curse');
     expect(ui.elements['curse-countdown'].children[0].textContent).toBe('30');
     expect(ui.intervals.size).toBe(1);
@@ -92,6 +93,7 @@ describe('OBS browser overlay', () => {
     ui.fire('curse:activated', effect());
     ui.fire('curse:expired', { id: 'gravity', expiredAt: 31_000, state: 'idle' });
     expect(ui.elements['streamalchemy-overlay'].classList.contains('is-idle')).toBe(true);
+    expect(ui.elements['streamalchemy-overlay'].classList.contains('is-active')).toBe(false);
     expect(ui.elements['curse-status'].textContent).toBe('GRAVITY STABLE');
     expect(ui.intervals.size).toBe(0);
   });
