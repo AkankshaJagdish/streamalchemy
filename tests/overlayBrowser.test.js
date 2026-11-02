@@ -82,19 +82,20 @@ describe('OBS browser overlay', () => {
   });
   it('selects each visual act from the original activation timestamp', () => {
     const ui = createHarness();
-    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
     ui.fire('curse:activated', effect());
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(1);
-    vi.setSystemTime(6_000);
+    now = 6_000;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(2);
-    vi.setSystemTime(14_000);
+    now = 14_000;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
-    vi.setSystemTime(18_000);
+    now = 18_000;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
-    vi.setSystemTime(27_000);
+    now = 27_000;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(5);
   });
@@ -106,19 +107,21 @@ describe('OBS browser overlay', () => {
     expect(ui.elements['curse-countdown'].children[0].textContent).toBe('16');
   });
   it('ends the four-second obstruction at the 17-second boundary even after a delayed tick', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(14_000);
+    let now = 14_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
     const ui = createHarness();
     ui.fire('curse:activated', effect());
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
-    vi.setSystemTime(18_001);
+    now = 18_001;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
   });
   it('restores every visual stage after expiry during a delayed callback', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(14_000);
+    let now = 14_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
     const ui = createHarness();
     ui.fire('curse:activated', effect());
-    vi.setSystemTime(32_000);
+    now = 32_000;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().active).toBe(false);
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(0);
