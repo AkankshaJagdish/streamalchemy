@@ -224,7 +224,7 @@ describe('overlay server', () => {
       expect(await redirectedPage.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
     } else {
       expect(withoutSlash.status).toBe(200);
-      expect(withoutSlash.headers.get('content-type')).toMatch(/text\\/html/);
+      expect(withoutSlash.headers.get('content-type')).toContain('text/html');
       expect(await withoutSlash.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
     }
 
