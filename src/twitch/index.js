@@ -16,10 +16,20 @@ export async function startTwitchIntegration({
   revalidationIntervalMs = TOKEN_REVALIDATION_INTERVAL_MS
 } = {}) {
   const { twitch: config } = loadConfig(env);
-  const auth = await validateConfiguredTwitchAuth({ config, fetchImpl });
-  logger.info('Twitch authentication validated', {
-    userId: auth.userId, login: auth.login, expiresIn: auth.expiresIn, scopes: auth.scopes
-  });
+  const mockMode = config.eventSubMode === 'mock';
+  let auth = null;
+
+  if (!mockMode) {
+    auth = await validateConfiguredTwitchAuth({ config, fetchImpl });
+    logger.info('Twitch authentication validated', {
+      userId: auth.userId, login: auth.login, expiresIn: auth.expiresIn, scopes: auth.scopes
+    });
+  } else {
+    logger.info('Local Twitch CLI mock EventSub mode enabled', {
+      eventSubUrl: config.eventSubUrl,
+      broadcasterUserId: config.broadcasterUserId
+    });
+  }
 
   const activateFromTwitch = (request) => {
     const result = engine.activate(request);
@@ -44,14 +54,16 @@ export async function startTwitchIntegration({
     onError: (error) => logger.error('Chat command processing failed', { message: error.message })
   });
 
+  // Mock mode deliberately has no Twitch redemption API client or fulfillment path.
   // channel:manage:redemptions is intentionally not requested by this MVP.
-  const redemptionService = createRedemptionService({
+  const redemptionService = mockMode ? null : createRedemptionService({
     clientId: config.clientId, accessToken: config.accessToken,
     broadcasterUserId: config.broadcasterUserId, apiBaseUrl: config.apiBaseUrl,
     fetchImpl, canManageRedemptions: false
   });
   const handleRedemption = createChannelPointsHandler({
     gravityRewardId: config.gravityRewardId,
+    broadcasterUserId: config.broadcasterUserId,
     activateCurse: activateFromTwitch,
     redemptionService,
     onReceived: ({ redemptionId, rewardId, username }) => {
@@ -101,15 +113,17 @@ export async function startTwitchIntegration({
   try {
     const session = await eventSub.start();
     logger.info('EventSub session established', { sessionId: session.sessionId });
-    validationTimer = setIntervalImpl(async () => {
-      try {
-        await validateConfiguredTwitchAuth({ config, fetchImpl });
-        logger.info('Twitch access token hourly validation succeeded');
-      } catch (error) {
-        logger.error('Twitch access token invalid; stopping EventSub', { message: error.message });
-        stop();
-      }
-    }, revalidationIntervalMs);
+    if (!mockMode) {
+      validationTimer = setIntervalImpl(async () => {
+        try {
+          await validateConfiguredTwitchAuth({ config, fetchImpl });
+          logger.info('Twitch access token hourly validation succeeded');
+        } catch (error) {
+          logger.error('Twitch access token invalid; stopping EventSub', { message: error.message });
+          stop();
+        }
+      }, revalidationIntervalMs);
+    }
     return Object.freeze({
       auth, sessionId: session.sessionId, engine, stop, eventSub,
       dispose() { unsubscribeEngineEvents(); stop(); }

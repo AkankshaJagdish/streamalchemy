@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { createEventSubSubscription } from './api.js';
 import { buildEventSubSubscriptions, EVENTSUB_TYPES } from './eventsubSubscriptions.js';
 import { createLogger } from '../utils/logger.js';
+import { DEFAULT_MOCK_EVENTSUB_URL } from '../config.js';
 
 const DEFAULT_EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 
@@ -34,8 +35,20 @@ export function createEventSubClient({
   setTimer = setTimeout,
   clearTimer = clearTimeout
 }) {
-  if (!config?.clientId || !config?.accessToken || !config?.broadcasterUserId) {
+  const mockMode = config?.eventSubMode === 'mock';
+  if (!config?.broadcasterUserId || (!mockMode && (!config?.clientId || !config?.accessToken))) {
     throw new TypeError('EventSub client requires validated Twitch configuration');
+  }
+  const eventSubUrl = config.eventSubUrl ?? (mockMode ? DEFAULT_MOCK_EVENTSUB_URL : DEFAULT_EVENTSUB_URL);
+  if (mockMode) {
+    let parsedUrl;
+    try { parsedUrl = new URL(eventSubUrl); }
+    catch { throw new TypeError('Mock EventSub URL must be a local loopback WebSocket URL'); }
+    const hostname = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (parsedUrl.protocol !== 'ws:' || !['localhost', '127.0.0.1', '::1'].includes(hostname)
+      || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
+      throw new TypeError('Mock EventSub URL must use ws:// and a loopback host');
+    }
   }
 
   let activeSocket = null;
@@ -120,7 +133,7 @@ export function createEventSubClient({
     if (stopped || reconnectTimer || handoverSocket) return;
     reconnectTimer = setTimer(() => {
       reconnectTimer = null;
-      connect(DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
+      connect(eventSubUrl, { handover: false }).catch((error) => {
         logger.error('EventSub reconnect failed', { message: error.message });
         scheduleFreshConnection();
       });
@@ -185,7 +198,7 @@ export function createEventSubClient({
               activeSessionId = session.id;
               keepaliveTimeoutSeconds = session.keepalive_timeout_seconds;
               resetKeepalive(keepaliveTimeoutSeconds, socket);
-              await registerSubscriptions(session.id);
+              if (!mockMode) await registerSubscriptions(session.id);
             }
             onStatus({ state: 'welcomed', sessionId: session.id, handover });
             resolve({ sessionId: session.id });
@@ -206,6 +219,10 @@ export function createEventSubClient({
         }
 
         if (messageType === 'session_reconnect') {
+          if (mockMode) {
+            logger.warn('Ignoring EventSub reconnect handover in local mock mode');
+            return;
+          }
           const reconnectUrl = message.payload?.session?.reconnect_url;
           if (typeof reconnectUrl !== 'string' || !reconnectUrl.startsWith('wss://')) {
             logger.error('EventSub reconnect message contained an invalid URL');
@@ -248,7 +265,7 @@ export function createEventSubClient({
             status: subscription?.status
           });
           onRevocation(subscription, message);
-          if (socket === activeSocket && subscription?.type && activeSessionId
+          if (!mockMode && socket === activeSocket && subscription?.type && activeSessionId
             && !recoveryInFlight.has(subscription.type)) {
             const replacement = buildEventSubSubscriptions({
               broadcasterUserId: config.broadcasterUserId,
@@ -311,7 +328,7 @@ export function createEventSubClient({
         startResolve = resolve;
         startReject = reject;
       });
-      connect(config.eventSubUrl ?? DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
+      connect(eventSubUrl, { handover: false }).catch((error) => {
         settleStart(error);
       });
       return startPromise;

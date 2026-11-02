@@ -4,7 +4,7 @@ function isValidEnvelope(notification) {
     && (notification.metadata.subscription_type ?? notification.payload?.subscription?.type) === REDEMPTION_EVENT_TYPE;
 }
 export function createChannelPointsHandler({
-  gravityRewardId, activateCurse, redemptionService, onReceived = () => {},
+  gravityRewardId, broadcasterUserId, activateCurse, redemptionService, onReceived = () => {},
   onProcessed = async () => {}, onError = () => {}, maxProcessedIds = 10_000
 }) {
   if (typeof activateCurse !== 'function') throw new TypeError('activateCurse must be a function');
@@ -22,6 +22,9 @@ export function createChannelPointsHandler({
     const rewardId = event?.reward?.id;
     if (!event || typeof redemptionId !== 'string' || !redemptionId.trim()
       || typeof rewardId !== 'string' || !rewardId.trim()) return { handled: false, reason: 'malformed-redemption' };
+    if (broadcasterUserId && event.broadcaster_user_id !== broadcasterUserId) {
+      return { handled: false, reason: 'broadcaster-mismatch' };
+    }
     if (!gravityRewardId) return { handled: true, activated: false, reason: 'gravity-reward-not-configured' };
     if (rewardId !== gravityRewardId) return { handled: true, activated: false, reason: 'unrelated-reward' };
     if (processedIds.has(redemptionId) || inFlightIds.has(redemptionId)) {

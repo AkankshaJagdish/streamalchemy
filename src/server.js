@@ -4,12 +4,14 @@ import { createOverlayServer } from './websocket/overlayServer.js';
 import { createCurseEngine } from './engine/curseEngine.js';
 import { startTwitchIntegration } from './twitch/index.js';
 import { logger } from './utils/logger.js';
+import { assertSafeEventSubMode } from './config.js';
 
 export async function createApplication({
   env = process.env, engine = createCurseEngine({ logger }),
   startTwitch = startTwitchIntegration, overlayFactory = createOverlayServer,
   logger: appLogger = logger
 } = {}) {
+  assertSafeEventSubMode(env);
   const overlay = overlayFactory({ engine, allowedOrigins: env.OVERLAY_ALLOWED_ORIGINS, logger: appLogger });
   let twitch = null;
   if (String(env.TWITCH_ENABLED ?? 'true').toLowerCase() !== 'false') {
