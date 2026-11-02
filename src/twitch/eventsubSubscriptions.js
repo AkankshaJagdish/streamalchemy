@@ -11,7 +11,8 @@ export const EVENTSUB_VERSIONS = Object.freeze({
 export function buildEventSubSubscriptions({
   broadcasterUserId,
   botUserId = broadcasterUserId,
-  sessionId
+  sessionId,
+  channelPointsEnabled = true
 }) {
   if (!broadcasterUserId || !/^\d+$/.test(String(broadcasterUserId))) {
     throw new TypeError('A numeric broadcasterUserId is required');
@@ -23,7 +24,7 @@ export function buildEventSubSubscriptions({
     throw new TypeError('A WebSocket sessionId is required');
   }
 
-  return [
+  const subscriptions = [
     {
       type: EVENTSUB_TYPES.CHAT_MESSAGE,
       version: EVENTSUB_VERSIONS[EVENTSUB_TYPES.CHAT_MESSAGE],
@@ -32,12 +33,17 @@ export function buildEventSubSubscriptions({
         user_id: String(botUserId)
       },
       transport: { method: 'websocket', session_id: sessionId }
-    },
-    {
+    }
+  ];
+
+  if (channelPointsEnabled) {
+    subscriptions.push({
       type: EVENTSUB_TYPES.CHANNEL_POINTS_REDEMPTION,
       version: EVENTSUB_VERSIONS[EVENTSUB_TYPES.CHANNEL_POINTS_REDEMPTION],
       condition: { broadcaster_user_id: String(broadcasterUserId) },
       transport: { method: 'websocket', session_id: sessionId }
-    }
-  ];
+    });
+  }
+
+  return subscriptions;
 }
