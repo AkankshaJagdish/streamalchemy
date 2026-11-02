@@ -100,3 +100,23 @@
 .overlay.stage-5 .chaos-layer,.overlay.stage-5 .firework-layer,.overlay.stage-5 .pinwheel-layer,.overlay.stage-5 .obstruction-layer{visibility:hidden;opacity:0}
 .overlay.stage-5 .curse-card{animation:none}
 .overlay.is-idle .firework-layer,.overlay.is-idle .pinwheel-layer,.overlay.is-idle .obstruction-layer,.overlay.is-idle .rickroll-card{visibility:hidden!important;opacity:0!important}
+
+
+/* Revised 0–17s spectacle, then restrained gameplay-safe aftermath. */
+.overlay.stage-1{animation:gravity-camera 1.4s steps(2,end) infinite}
+.overlay.stage-1 .firework-layer{visibility:visible;opacity:1}
+.overlay.stage-1 .firework{animation:firework-pop .75s ease-out infinite}
+.overlay.stage-2{animation:gravity-camera 1.1s ease-in-out infinite}
+.overlay.stage-2 .pinwheel-layer{visibility:visible;opacity:1}
+.overlay.stage-2 .pinwheel{animation-duration:2.7s}
+.overlay.stage-3{animation:none!important;transform:none!important}
+.overlay.stage-3 .obstruction-layer{visibility:visible;opacity:1}
+.overlay.stage-4 .rickroll-video-layer{visibility:visible;opacity:1}
+.overlay.stage-5 .obstruction-layer,.overlay.stage-5 .rickroll-card{visibility:hidden!important;opacity:0!important}
+.overlay.stage-5 .firework-layer,.overlay.stage-5 .pinwheel-layer{visibility:hidden!important;opacity:0!important}
+.overlay.stage-5{animation:none!important;transform:none!important}
+.overlay.stage-5 .curse-card{animation:none!important;transform:none!important}
+@media(prefers-reduced-motion:reduce){
+ .overlay.stage-1,.overlay.stage-2{animation:none!important}
+ .overlay.stage-1 .firework,.overlay.stage-2 .pinwheel{animation:none!important;opacity:.35}
+}

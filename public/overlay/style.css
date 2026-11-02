@@ -255,3 +255,57 @@ h1 { margin: 7px 0 4px; color: #f8f5ff; font-size: clamp(25px, 4.2vw, 42px); fon
  .overlay.stage-5 .rickroll-card{animation:none;opacity:1}
  .overlay.is-active{transform:none!important}
 }
+
+
+/* Compact broadcast-safe status strip: reserve the central gameplay area. */
+.curse-card{
+  position:absolute;z-index:30;top:clamp(10px,1.5vh,20px);left:50%;
+  width:min(620px,calc(100vw - 28px));max-width:620px;
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;column-gap:clamp(10px,2vw,22px);
+  padding:7px 13px;border-radius:12px;border:1px solid rgb(196 181 253 / 30%);
+  background:linear-gradient(110deg,rgba(12,8,29,.70),rgba(17,14,39,.58));
+  box-shadow:0 5px 20px rgba(0,0,0,.18);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  overflow:visible;transition:none;
+}
+.curse-card::before{display:none}
+.curse-card .brand-row{display:none}
+.curse-main{grid-column:1;min-width:0;gap:0;padding:0}
+.curse-emblem{display:none}
+.curse-copy{display:flex;min-width:0;align-items:baseline;gap:8px;white-space:nowrap}
+.curse-copy .eyebrow{font-size:8px;letter-spacing:.12em;gap:5px}
+.curse-copy h1{margin:0;font-size:clamp(13px,1.2vw,17px);line-height:1.1;letter-spacing:-.02em}
+.curse-copy #curse-subtitle{display:none}
+.curse-copy .status-dot{width:6px;height:6px}
+.timer-row{grid-column:2;padding:0;border:0;white-space:nowrap}
+.timer-label,.timer-track{display:none}
+.timer-value{margin:0;font-size:clamp(18px,1.7vw,23px);line-height:1;font-weight:850}
+.timer-value span{font-size:8px}
+.footer-row{grid-column:3;gap:0;margin:0;white-space:nowrap;font-size:7px;letter-spacing:.08em}
+.footer-note{display:none}
+.connection-state{gap:5px}
+.connection-state i{width:5px;height:5px}
+.overlay.is-active .curse-card{animation:none;transform:none}
+.overlay.stage-3 .curse-card,.overlay.stage-4 .curse-card{z-index:30}
+.rickroll-video-layer{position:absolute;z-index:12;inset:0;display:none;align-items:center;justify-content:center;overflow:hidden;background:#05020d;pointer-events:none}
+.overlay.stage-4 .rickroll-video-layer{display:flex}
+.rickroll-video-layer video{display:block;width:100%;height:100%;object-fit:contain;background:#05020d}
+.rickroll-video-fallback{display:none;position:absolute;inset:0;place-items:center;margin:0;padding:10vw;background:radial-gradient(circle,#38106f,#080311 70%);color:#ffdf55;text-align:center;font-size:clamp(30px,7vw,96px);font-weight:1000;line-height:1.05;text-shadow:5px 5px #ed278c,-3px -3px #24dff5}
+.rickroll-video-layer.is-fallback .rickroll-video-fallback{display:grid}
+.rickroll-video-layer.is-fallback video{display:none}
+.overlay.stage-5 .firework-layer,.overlay.stage-5 .pinwheel-layer,.overlay.stage-5 .obstruction-layer{visibility:hidden!important;opacity:0!important}
+.overlay.stage-5 .chaos-layer{opacity:.38}
+.overlay.stage-5 .chaos-object{animation-duration:10s;opacity:.28}
+@media(max-width:520px){
+ .curse-card{width:calc(100vw - 18px);top:8px;padding:6px 9px;column-gap:8px}
+ .curse-copy{gap:5px}.curse-copy .eyebrow{font-size:7px;letter-spacing:.05em}
+ .curse-copy h1{font-size:12px}.timer-value{font-size:17px}
+ .footer-row{font-size:6px}.connection-state{gap:3px}
+}
+@media(max-width:360px){
+ .curse-card{grid-template-columns:minmax(0,1fr) auto;row-gap:3px}
+ .footer-row{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+ .overlay.stage-1,.overlay.stage-2,.overlay.stage-3{animation:none!important}
+ .rickroll-video-layer video{object-fit:contain}
+}
