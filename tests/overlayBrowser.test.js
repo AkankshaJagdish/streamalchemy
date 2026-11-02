@@ -158,6 +158,24 @@ describe('OBS browser overlay', () => {
     expect(video.removed).toBe(true);
     expect(ui.window.StreamAlchemyOverlay.getVideoState().present).toBe(false);
   });
+  it('seeks the local video to elapsed curse time when joining mid-video', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(13_250);
+    const ui = createHarness();
+    ui.fire('curse:state', { state: 'active', effect: effect() });
+    const video = ui.elements['rickroll-video-layer'].children.find((child) => child.tagName === 'video');
+    video.listeners.loadedmetadata();
+    expect(video.currentTime).toBe(4.25);
+  });
+  it('shows a visual fallback on a media loading error', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(9_000);
+    const ui = createHarness();
+    ui.fire('curse:activated', effect());
+    const video = ui.elements['rickroll-video-layer'].children.find((child) => child.tagName === 'video');
+    video.listeners.error();
+    expect(ui.window.StreamAlchemyOverlay.getVideoState().failed).toBe(true);
+    expect(ui.elements['rickroll-video-layer'].classList.contains('is-fallback')).toBe(true);
+    expect(ui.window.StreamAlchemyOverlay.getState().active).toBe(true);
+  });
   it('does not replay the video when connecting after its stage has ended', () => {
     vi.spyOn(Date, 'now').mockReturnValue(18_000);
     const ui = createHarness();
