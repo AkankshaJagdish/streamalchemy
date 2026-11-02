@@ -234,7 +234,7 @@ export function createEventSubClient({
 
         if (messageType === 'session_keepalive') {
           if (socket === activeSocket) {
-            logger.debug('EventSub keepalive received');
+            logger.info('EventSub keepalive received');
             resetKeepalive(keepaliveTimeoutSeconds, socket);
           }
           onStatus({ state: 'keepalive' });
