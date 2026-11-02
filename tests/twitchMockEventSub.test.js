@@ -106,6 +106,11 @@ describe('local Twitch CLI mock EventSub mode', () => {
     });
   });
 
+  it('uses the local WebSocket default when the optional URL variable is blank', () => {
+    expect(loadConfig(mockEnv({ TWITCH_EVENTSUB_WS_URL: '' })).twitch.eventSubUrl)
+      .toBe('ws://127.0.0.1:8080/ws');
+  });
+
   it('discards unused production credentials and bot settings in mock configuration', () => {
     expect(loadConfig(mockEnv({
       TWITCH_CLIENT_ID: 'should-not-be-retained',
