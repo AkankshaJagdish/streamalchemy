@@ -88,3 +88,15 @@
     transform: none !important;
   }
 }
+
+
+/* Stage timing is supplied by overlay.js from startedAt/expiresAt. */
+.overlay.stage-1 .chaos-layer{opacity:1}
+.overlay.stage-1 .chaos-object{animation-duration:calc(var(--speed) * .58)}
+.overlay.stage-1 .curse-card{animation:card-arrive 500ms ease-out both,card-pulse 1.8s ease-in-out infinite}
+.overlay.stage-2 .curse-card{animation:card-pulse 2.5s ease-in-out infinite}
+.overlay.stage-3 .curse-card{animation:none;transform:none}
+.overlay.stage-4 .curse-card{animation:card-pulse 5s ease-in-out infinite}
+.overlay.stage-5 .chaos-layer,.overlay.stage-5 .firework-layer,.overlay.stage-5 .pinwheel-layer,.overlay.stage-5 .obstruction-layer{visibility:hidden;opacity:0}
+.overlay.stage-5 .curse-card{animation:none}
+.overlay.is-idle .firework-layer,.overlay.is-idle .pinwheel-layer,.overlay.is-idle .obstruction-layer,.overlay.is-idle .rickroll-card{visibility:hidden!important;opacity:0!important}

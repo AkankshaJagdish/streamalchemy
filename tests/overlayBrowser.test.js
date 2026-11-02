@@ -42,7 +42,9 @@ function createHarness() {
   const document = {
     getElementById: (id) => elements[id],
     createElement: (tag) => makeElement(tag),
-    createTextNode: (text) => ({ textContent: String(text) })
+    createTextNode: (text) => ({ textContent: String(text) }),
+    addEventListener: vi.fn(),
+    hidden: false
   };
   vm.runInNewContext(script, { window, document, Date, Number, Boolean, Math });
   return {
@@ -79,6 +81,55 @@ describe('OBS browser overlay', () => {
     expect(ui.elements['curse-title'].textContent).toBe('Gravity Curse');
     expect(ui.elements['curse-countdown'].children[0].textContent).toBe('30');
     expect(ui.intervals.size).toBe(1);
+  });
+  it('selects each visual act from the original activation timestamp', () => {
+    const ui = createHarness();
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    ui.fire('curse:activated', effect());
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(1);
+    now = 6_000;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(2);
+    now = 14_000;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
+    now = 18_000;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
+    now = 27_000;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(5);
+  });
+  it('joins midway through a curse at the correct stage without restarting timing', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(15_000);
+    const ui = createHarness();
+    ui.fire('curse:state', { state: 'active', effect: effect() });
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
+    expect(ui.elements['curse-countdown'].children[0].textContent).toBe('16');
+  });
+  it('ends the four-second obstruction at the 17-second boundary even after a delayed tick', () => {
+    let now = 14_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const ui = createHarness();
+    ui.fire('curse:activated', effect());
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
+    now = 18_001;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
+  });
+  it('restores every visual stage after expiry during a delayed callback', () => {
+    let now = 14_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const ui = createHarness();
+    ui.fire('curse:activated', effect());
+    now = 32_000;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().active).toBe(false);
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(0);
+    expect(ui.elements['streamalchemy-overlay'].classList.contains('is-idle')).toBe(true);
+    expect(ui.elements['streamalchemy-overlay'].classList.contains('is-active')).toBe(false);
+    expect(ui.intervals.size).toBe(0);
   });
   it('calculates remaining time from the original expiresAt timestamp', () => {
     vi.spyOn(Date, 'now').mockReturnValue(11_001);

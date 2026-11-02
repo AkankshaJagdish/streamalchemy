@@ -185,3 +185,73 @@ h1 { margin: 7px 0 4px; color: #f8f5ff; font-size: clamp(25px, 4.2vw, 42px); fon
 @media (prefers-reduced-motion: reduce) {
   .overlay.is-active .chaos-object { animation: none; opacity: .42; }
 }
+
+
+/* Five timestamp-selected acts. All decorative layers are pointer-transparent. */
+.firework-layer,.pinwheel-layer,.obstruction-layer,.rickroll-card{position:absolute;inset:0;pointer-events:none;visibility:hidden;opacity:0}
+.firework-layer{z-index:2;overflow:hidden}
+.firework{position:absolute;width:8px;height:8px;border-radius:50%;opacity:0}
+.firework::before,.firework::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:repeating-conic-gradient(from 0deg,#ff3d8d 0 7deg,transparent 7deg 18deg,#ffe45e 18deg 25deg,transparent 25deg 36deg);mask:radial-gradient(circle,transparent 0 18%,#000 22% 100%)}
+.firework::after{transform:rotate(22deg);background:repeating-conic-gradient(#4deaff 0 6deg,transparent 6deg 17deg,#b66bff 17deg 25deg,transparent 25deg 36deg)}
+.burst-a{left:13%;top:25%}.burst-b{left:82%;top:20%}.burst-c{left:74%;top:78%}.burst-d{left:23%;top:78%}
+.overlay.stage-1 .firework-layer,.overlay.stage-2 .firework-layer,.overlay.stage-3 .firework-layer{visibility:visible;opacity:1}
+.overlay.stage-1 .firework{animation:firework-pop 1.15s ease-out infinite}
+.overlay.stage-1 .burst-b{animation-delay:.25s}.overlay.stage-1 .burst-c{animation-delay:.5s}.overlay.stage-1 .burst-d{animation-delay:.75s}
+.overlay.stage-2 .firework{animation:firework-pop 1.8s ease-out infinite;opacity:.48}
+.overlay.stage-3 .firework{animation:firework-pop .75s ease-out infinite}
+@keyframes firework-pop{0%{transform:scale(.08);opacity:0}18%{opacity:1}100%{transform:scale(17);opacity:0}}
+.pinwheel-layer{z-index:3;overflow:hidden}
+.pinwheel{position:absolute;display:block;color:#ff4fa3;font-style:normal;font-size:clamp(38px,6vw,84px);line-height:1;text-shadow:0 0 10px #fff,0 0 22px currentColor;opacity:0;will-change:transform,opacity}
+.pinwheel:nth-child(3n){color:#5be7ff}.pinwheel:nth-child(3n + 1){color:#ffe45e}
+.overlay.stage-2 .pinwheel,.overlay.stage-3 .pinwheel{animation:pinwheel-cross 5s linear infinite}
+.overlay.stage-3 .pinwheel{animation-duration:2.4s;opacity:.95}
+.pw-1{left:-8%;top:8%;animation-delay:-.4s!important}.pw-2{left:18%;top:-12%;animation-delay:-2.1s!important}
+.pw-3{left:42%;top:15%;animation-delay:-3.3s!important}.pw-4{left:67%;top:-10%;animation-delay:-1.4s!important}
+.pw-5{left:92%;top:30%;animation-delay:-2.7s!important}.pw-6{left:-7%;top:58%;animation-delay:-3.8s!important}
+.pw-7{left:24%;top:84%;animation-delay:-1.8s!important}.pw-8{left:53%;top:65%;animation-delay:-.9s!important}
+.pw-9{left:78%;top:90%;animation-delay:-4.1s!important}.pw-10{left:104%;top:70%;animation-delay:-2.4s!important}
+.pw-11{left:35%;top:110%;animation-delay:-3s!important}.pw-12{left:72%;top:-15%;animation-delay:-.2s!important}
+@keyframes pinwheel-cross{0%{opacity:0;transform:translate3d(-8vw,-8vh,0) rotate(0) scale(.55)}12%{opacity:.9}50%{transform:translate3d(35vw,35vh,0) rotate(540deg) scale(1.1)}88%{opacity:.8}100%{opacity:0;transform:translate3d(110vw,100vh,0) rotate(1080deg) scale(.7)}}
+.overlay.stage-2 .chaos-object{animation-duration:calc(var(--speed) * .72)}
+.overlay.stage-3 .chaos-object{opacity:.95}
+.obstruction-layer{z-index:5;display:grid;place-items:center;overflow:hidden;background:repeating-linear-gradient(135deg,rgba(255,45,149,.92) 0 28px,rgba(255,214,64,.93) 28px 56px,rgba(70,225,255,.93) 56px 84px,rgba(151,83,255,.94) 84px 112px)}
+.overlay.stage-3 .obstruction-layer{visibility:visible;opacity:1;animation:obstruction-in .22s steps(3,end) both}
+.obstruction-layer::before{content:"";position:absolute;inset:-40%;background:repeating-conic-gradient(from 0deg,rgba(255,255,255,.88) 0 5deg,transparent 5deg 15deg);animation:obstruction-spin 3s linear infinite}
+.obstruction-layer::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at center,transparent 0 15%,rgba(10,3,30,.32) 75%)}
+.obstruction-burst{position:absolute;z-index:2;padding:.15em .3em;border:5px solid #fff;border-radius:22px;background:#ffec45;color:#ef176c;font-size:clamp(48px,12vw,150px);font-weight:1000;font-style:italic;letter-spacing:-.08em;text-shadow:4px 4px #fff;box-shadow:0 0 0 8px #7b36ff;transform:rotate(-18deg)}
+.burst-left{left:-2%;top:9%}.burst-right{right:-2%;bottom:10%;transform:rotate(14deg)}
+.obstruction-caption{position:relative;z-index:3;padding:.18em .3em;background:#16062f;color:#fff;font-size:clamp(23px,5vw,68px);font-weight:1000;text-align:center;letter-spacing:-.05em;text-shadow:4px 4px #fa268c, -3px -3px #13dafa;transform:rotate(-4deg)}
+.obstruction-confetti{position:absolute;inset:0;opacity:.9;background-image:radial-gradient(circle,#fff 0 3px,transparent 4px),radial-gradient(circle,#16102f 0 4px,transparent 5px),linear-gradient(45deg,transparent 48%,#fff 49% 52%,transparent 53%);background-size:43px 57px,67px 71px,31px 37px;background-position:0 0,18px 24px,9px 12px;animation:confetti-drift .45s steps(2,end) infinite}
+@keyframes obstruction-in{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:scale(1)}}
+@keyframes obstruction-spin{to{transform:rotate(360deg)}}
+@keyframes confetti-drift{to{background-position:43px 57px,85px 95px,40px 49px}}
+.rickroll-card{z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(12px,3vh,28px);padding:4vw;background:radial-gradient(ellipse at center,#31106d 0,#100522 58%,#03020a 100%);text-align:center}
+.overlay.stage-5 .rickroll-card{visibility:visible;opacity:1;animation:retro-reveal .45s steps(4,end) both}
+.retro-tv{width:min(82vw,900px);padding:clamp(13px,2vw,25px);border:clamp(8px,1.5vw,16px) solid #ffcf4a;border-radius:30px;background:linear-gradient(145deg,#e6a52d,#7c3db9 48%,#22103e);box-shadow:0 0 0 5px #ff4ca0,0 0 55px #fc39bb,0 0 110px #4deaff;transform:perspective(900px) rotateX(2deg)}
+.tv-screen{position:relative;overflow:hidden;padding:clamp(18px,4vw,48px) 12px;border:5px ridge #9af7ff;border-radius:16px;background:repeating-linear-gradient(0deg,#160b37 0 3px,#21114c 3px 6px);color:#fff;text-shadow:3px 3px #e52e9b,-2px -2px #1ddcf2}
+.scanlines{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(255,255,255,.12) 4px 5px)}
+.retro-spark{color:#ffe55b;font-size:clamp(18px,3vw,35px);letter-spacing:.2em}
+.rickroll-setup,.rickroll-reveal{position:relative;margin:12px 0;font-weight:1000;line-height:.98;letter-spacing:-.045em}
+.rickroll-setup{font-size:clamp(22px,5.4vw,68px);color:#fff}
+.rickroll-reveal{font-size:clamp(30px,7vw,92px);color:#ffdf4a}
+.rickroll-reveal strong{display:inline-block;color:#ff59b5;transform:skew(-5deg);text-shadow:5px 5px #5420a0,-3px -3px #26eaff}
+.retro-divider{color:#62efff;letter-spacing:.5em}
+.tv-controls{display:flex;justify-content:flex-end;gap:10px;padding:10px 5px 0}
+.tv-controls span{width:12px;height:12px;border-radius:50%;background:#ffdf4a;box-shadow:0 0 8px #ffdf4a}
+.retro-caption{color:#8af7ff;font-size:clamp(8px,1.3vw,13px);font-weight:800;letter-spacing:.22em}
+.overlay.stage-5 .curse-card{z-index:7;border-color:#ffdf4a;box-shadow:0 0 22px #ff4ca0}
+.overlay.stage-3 .curse-card{z-index:7}
+.overlay.stage-4 .pinwheel{animation-duration:9s;opacity:.55}
+.overlay.stage-4 .chaos-object{opacity:.5}
+.overlay.stage-4{animation-duration:11s}
+.overlay.stage-1{animation-duration:2.1s}
+.overlay.stage-2{animation-duration:3.8s}
+.overlay.stage-3{animation:none;transform:none}
+@keyframes retro-reveal{from{opacity:0;transform:scale(.9);filter:saturate(2)}to{opacity:1;transform:scale(1);filter:saturate(1)}}
+@media(prefers-reduced-motion:reduce){
+ .firework,.pinwheel,.obstruction-layer::before,.obstruction-confetti{animation:none!important}
+ .overlay.stage-1 .firework,.overlay.stage-2 .pinwheel,.overlay.stage-3 .pinwheel{opacity:.35}
+ .overlay.stage-3 .obstruction-layer{animation:none;opacity:1}
+ .overlay.stage-5 .rickroll-card{animation:none;opacity:1}
+ .overlay.is-active{transform:none!important}
+}
