@@ -71,15 +71,30 @@ export function createEventSubClient({
     else startResolve(value);
   }
 
+  function clearKeepaliveTimer() {
+    if (keepaliveTimer !== null) {
+      clearTimer(keepaliveTimer);
+      keepaliveTimer = null;
+    }
+  }
+
   function resetKeepalive(timeoutSeconds, socket) {
-    if (keepaliveTimer) clearTimer(keepaliveTimer);
-    if (!timeoutSeconds || timeoutSeconds <= 0 || socket !== activeSocket) return;
-    keepaliveTimer = setTimer(() => {
-      logger.warn('EventSub keepalive timeout; starting a fresh session');
-      if (socket === activeSocket && socket.readyState < WebSocketImpl.CLOSING) {
+    clearKeepaliveTimer();
+    if (!timeoutSeconds || timeoutSeconds <= 0 || socket !== activeSocket || stopped) return;
+    const timer = setTimer(() => {
+      // A timer may already be queued when a socket is replaced or stopped.
+      // It must never act on a newer connection.
+      if (keepaliveTimer !== timer || socket !== activeSocket || stopped) return;
+      keepaliveTimer = null;
+      logger.warn('EventSub keepalive grace-period timeout expired; closing inactive session', {
+        keepaliveTimeoutSeconds: timeoutSeconds,
+        gracePeriodMs: 5_000
+      });
+      if (socket.readyState < WebSocketImpl.CLOSING) {
         socket.close(4000, 'EventSub keepalive timeout');
       }
-    }, timeoutSeconds * 1000);
+    }, timeoutSeconds * 1000 + 5_000);
+    keepaliveTimer = timer;
   }
 
   async function registerSubscription(subscription) {
@@ -191,6 +206,10 @@ export function createEventSubClient({
           welcomed = true;
 
           try {
+            logger.info('EventSub session welcomed', {
+              keepaliveTimeoutSeconds: session.keepalive_timeout_seconds,
+              handover
+            });
             if (handover) {
               // The replacement session inherits old subscriptions; don't
               // resubscribe. Keep old socket open until this Welcome arrives.
@@ -214,7 +233,10 @@ export function createEventSubClient({
         }
 
         if (messageType === 'session_keepalive') {
-          if (socket === activeSocket) resetKeepalive(keepaliveTimeoutSeconds, socket);
+          if (socket === activeSocket) {
+            logger.debug('EventSub keepalive received');
+            resetKeepalive(keepaliveTimeoutSeconds, socket);
+          }
           onStatus({ state: 'keepalive' });
           return;
         }
@@ -247,9 +269,12 @@ export function createEventSubClient({
         }
 
         if (messageType === 'notification') {
-          if (socket === activeSocket) resetKeepalive(keepaliveTimeoutSeconds, socket);
-          onNotification(message);
           const type = message.metadata.subscription_type ?? message.payload?.subscription?.type;
+          if (socket === activeSocket) {
+            logger.info('EventSub notification received', { type: type ?? 'unknown' });
+            resetKeepalive(keepaliveTimeoutSeconds, socket);
+          }
+          onNotification(message);
           try {
             if (type === EVENTSUB_TYPES.CHAT_MESSAGE) await onChatMessage(message);
             else if (type === EVENTSUB_TYPES.CHANNEL_POINTS_REDEMPTION) await onRedemption(message);
@@ -289,10 +314,7 @@ export function createEventSubClient({
       });
 
       socket.on('close', (code, reason) => {
-        if (socket === activeSocket && keepaliveTimer) {
-          clearTimer(keepaliveTimer);
-          keepaliveTimer = null;
-        }
+        if (socket === activeSocket) clearKeepaliveTimer();
         onStatus({ state: 'closed', code, reason: reason?.toString?.() ?? '' });
         const wasHandoverSocket = socket === handoverSocket;
         if (wasHandoverSocket) handoverSocket = null;
@@ -337,7 +359,7 @@ export function createEventSubClient({
     },
     stop() {
       stopped = true;
-      if (keepaliveTimer) clearTimer(keepaliveTimer);
+      clearKeepaliveTimer();
       if (reconnectTimer) clearTimer(reconnectTimer);
       activeSocket?.close(1000, 'Application shutdown');
       if (handoverSocket && handoverSocket !== activeSocket) {
