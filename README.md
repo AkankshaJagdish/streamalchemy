@@ -366,3 +366,25 @@ Keep this service at exactly one replica for its entire lifetime: minimum 1, max
 ## Project scope and known limitations
 
 This draft deliberately keeps the chosen MVP scope. It has one visual effect (Gravity Curse), no stacking/queue, one configured Channel Points reward, and no automatic redemption fulfillment. It is an OBS browser overlay rather than a reviewed Twitch Extension. The real Twitch and OBS acceptance test must be completed on the target channel before the project is described as fully verified.
+
+
+## Rickroll video asset and OBS audio
+
+Place the supplied, unmodified nine-second MP4 at:
+
+`public/overlay/assets/rickroll.mp4`
+
+The overlay references only the local path `/overlay/assets/rickroll.mp4`. Do not substitute a remote URL. If the file is missing, cannot be decoded, or browser autoplay is blocked, the overlay displays a self-contained visual fallback and the Curse Engine countdown/expiration continues normally.
+
+The video is scheduled from the original activation timestamp: fireworks/confetti 0–2s, pinwheels 2–4s, obstruction 4–8s, local video 8–17s, then gameplay-visible aftermath until the original 30-second expiry. A Browser Source joining during the video seeks to the corresponding elapsed position; joining after 17 seconds does not replay it.
+
+### Include Browser Source audio in OBS
+
+1. In OBS, open the Browser Source **Properties**.
+2. Enable **Control audio via OBS** (wording may vary by OBS version).
+3. Open **Advanced Audio Properties** for the Browser Source in the Audio Mixer.
+4. Set the desired audio monitoring mode. Use **Monitor and Output** if you need to hear the soundtrack locally as well as include it in the stream/recording; use **Output** if you only need it in the stream/recording.
+5. Confirm the Browser Source audio meter moves during the video stage and that the Browser Source is included in the active recording/stream audio mix.
+6. Make a short local test recording and verify the soundtrack is present before going live.
+
+The browser may block unmuted autoplay depending on Chromium/OBS policy. The overlay handles a rejected `play()` promise with a visual fallback; confirm OBS permits Browser Source audio playback in the target setup.
