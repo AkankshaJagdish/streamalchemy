@@ -100,7 +100,8 @@ export function createEventSubClient({
     const subscriptions = buildEventSubSubscriptions({
       broadcasterUserId: config.broadcasterUserId,
       botUserId: config.botUserId ?? config.broadcasterUserId,
-      sessionId
+      sessionId,
+      channelPointsEnabled: config.channelPointsEnabled !== false
     });
 
     // Keep both registration attempts independent. A failed chat subscription
@@ -270,7 +271,8 @@ export function createEventSubClient({
             const replacement = buildEventSubSubscriptions({
               broadcasterUserId: config.broadcasterUserId,
               botUserId: config.botUserId ?? config.broadcasterUserId,
-              sessionId: activeSessionId
+              sessionId: activeSessionId,
+              channelPointsEnabled: config.channelPointsEnabled !== false
             }).find((candidate) => candidate.type === subscription.type);
             if (replacement) {
               recoveryInFlight.add(subscription.type);
