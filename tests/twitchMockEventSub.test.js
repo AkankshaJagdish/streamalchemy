@@ -151,6 +151,25 @@ describe('local Twitch CLI mock EventSub mode', () => {
     client.stop();
   });
 
+  it('reconnects only to the configured local URL after a mock socket closes', async () => {
+    vi.useFakeTimers();
+    MockSocket.instances = [];
+    const client = createEventSubClient({
+      config: loadConfig(mockEnv({ TWITCH_EVENTSUB_WS_URL: 'ws://localhost:9090/ws' })).twitch,
+      WebSocketImpl: MockSocket,
+      reconnectDelayMs: 250
+    });
+    const started = client.start();
+    const firstSocket = MockSocket.instances[0];
+    firstSocket.sendFrame(welcome());
+    await started;
+    firstSocket.close(1006, 'local mock server restarted');
+    vi.advanceTimersByTime(250);
+    expect(MockSocket.instances).toHaveLength(2);
+    expect(MockSocket.instances[1].url).toBe('ws://localhost:9090/ws');
+    client.stop();
+  });
+
   it('routes a valid mock redemption through the shared engine and broadcasts existing overlay events', async () => {
     vi.useFakeTimers({ now: new Date('2026-11-02T12:00:00Z').getTime() });
     MockSocket.instances = [];
@@ -254,7 +273,11 @@ describe('local Twitch CLI mock EventSub mode', () => {
     });
     const fetchImpl = vi.fn();
     const integrationPromise = startTwitchIntegration({
-      env: mockEnv(), fetchImpl, WebSocketImpl: MockSocket, engine, logger: log
+      env: mockEnv({
+        TWITCH_CLIENT_ID: 'mock-client-id',
+        TWITCH_CLIENT_SECRET: 'mock-client-secret',
+        TWITCH_USER_ACCESS_TOKEN: 'mock-access-token'
+      }), fetchImpl, WebSocketImpl: MockSocket, engine, logger: log
     });
     MockSocket.instances[0].sendFrame(welcome());
     const integration = await integrationPromise;
@@ -262,7 +285,7 @@ describe('local Twitch CLI mock EventSub mode', () => {
     await tick();
 
     const publicAndLogData = JSON.stringify({ emitted: io.emitted, logs: [log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls] });
-    expect(publicAndLogData).not.toMatch(/accessToken|clientSecret|TWITCH_USER_ACCESS_TOKEN|TWITCH_CLIENT_SECRET/);
+    expect(publicAndLogData).not.toMatch(/accessToken|clientSecret|TWITCH_USER_ACCESS_TOKEN|TWITCH_CLIENT_SECRET|mock-client-id|mock-client-secret|mock-access-token/);
     expect(fetchImpl).not.toHaveBeenCalled();
     integration.dispose();
     overlay.close();
