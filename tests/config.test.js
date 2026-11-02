@@ -30,6 +30,17 @@ describe('loadConfig', () => {
       .toThrow(/TWITCH_BOT_USER_ID must be a numeric Twitch user ID/);
   });
 
+  it('disables Channel Points when explicitly configured for a chat-only demo', () => {
+    const config = loadConfig({ ...validEnv, TWITCH_CHANNEL_POINTS_ENABLED: 'false' });
+    expect(config.twitch.channelPointsEnabled).toBe(false);
+  });
+
+  it('keeps Channel Points enabled by default and rejects invalid toggle values', () => {
+    expect(loadConfig(validEnv).twitch.channelPointsEnabled).toBe(true);
+    expect(() => loadConfig({ ...validEnv, TWITCH_CHANNEL_POINTS_ENABLED: 'sometimes' }))
+      .toThrow(/TWITCH_CHANNEL_POINTS_ENABLED must be either true or false/);
+  });
+
   it('loads the optional Gravity Curse reward ID', () => {
     expect(loadConfig({ ...validEnv, TWITCH_GRAVITY_REWARD_ID: 'reward-123' }).twitch.gravityRewardId)
       .toBe('reward-123');

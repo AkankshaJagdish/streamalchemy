@@ -60,6 +60,30 @@ describe('EventSub WebSocket client', () => {
     client.stop();
   });
 
+  it('registers only the chat subscription in chat-only production mode', async () => {
+    MockSocket.instances = [];
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true, status: 202, json: async () => ({ data: [{ id: 'chat-sub-id' }] })
+    });
+    const client = createEventSubClient({
+      config: {
+        clientId: 'client',
+        accessToken: 'token',
+        broadcasterUserId: '100',
+        botUserId: '100',
+        channelPointsEnabled: false
+      },
+      fetchImpl,
+      WebSocketImpl: MockSocket
+    });
+    const started = client.start();
+    MockSocket.instances[0].sendFrame(welcome('session-chat-only'));
+    await started;
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).type).toBe('channel.chat.message');
+    client.stop();
+  });
+
   it('routes notifications to the matching callback and handles revocation', async () => {
     MockSocket.instances = [];
     const onChatMessage = vi.fn();

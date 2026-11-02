@@ -1,4 +1,4 @@
-import { REQUIRED_TWITCH_SCOPES } from '../config.js';
+import { CHAT_ONLY_TWITCH_SCOPES, REQUIRED_TWITCH_SCOPES } from '../config.js';
 
 export class TwitchAuthError extends Error {
   constructor(message, details = {}) {
@@ -94,7 +94,9 @@ export async function validateConfiguredTwitchAuth({ config, fetchImpl = fetch }
     clientId: config.clientId,
     expectedUserId: config.broadcasterUserId,
     expectedLogin: config.broadcasterLogin,
-    requiredScopes: REQUIRED_TWITCH_SCOPES,
+    requiredScopes: config.channelPointsEnabled === false
+      ? CHAT_ONLY_TWITCH_SCOPES
+      : REQUIRED_TWITCH_SCOPES,
     fetchImpl
   });
 }
