@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { io as createSocketClient } from 'socket.io-client';
 import { createOverlayServer } from '../src/websocket/overlayServer.js';
 import { OVERLAY_EVENTS } from '../src/websocket/overlayEvents.js';
 
@@ -49,9 +50,16 @@ const mockLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 describe('overlay server', () => {
   let server;
-  afterEach(() => {
-    server?.close();
+  afterEach(async () => {
+    const currentServer = server;
     server = null;
+    if (currentServer) {
+      const closed = currentServer.httpServer?.listening
+        ? new Promise((resolve) => currentServer.httpServer.once('close', resolve))
+        : Promise.resolve();
+      currentServer.close();
+      await closed;
+    }
     vi.restoreAllMocks();
   });
 
@@ -168,4 +176,97 @@ describe('overlay server', () => {
     expect(socket.on).toHaveBeenCalledWith('disconnect', expect.any(Function));
     expect(socket.on).not.toHaveBeenCalledWith('activate', expect.any(Function));
   });
+  it('serves health, the overlay page, and its referenced assets over real HTTP', async () => {
+    server = createOverlayServer({ engine: makeEngine(), logger: mockLogger });
+    const address = await server.listen(0, '127.0.0.1');
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const health = await fetch(`${baseUrl}/health`);
+    expect(health.status).toBe(200);
+    expect(health.headers.get('content-type')).toMatch(/application\/json/);
+    expect(await health.json()).toEqual({ ok: true });
+
+    const overlayResponse = await fetch(`${baseUrl}/overlay/`);
+    expect(overlayResponse.status).toBe(200);
+    expect(overlayResponse.headers.get('content-type')).toMatch(/text\/html/);
+    const html = await overlayResponse.text();
+    expect(html).toContain('StreamAlchemy — Gravity Curse Overlay');
+    expect(html).toContain('id="curse-countdown"');
+    expect(html).toContain('href="/overlay/style.css"');
+    expect(html).toContain('href="/overlay/animations.css"');
+    expect(html).toContain('src="/overlay/overlay.js"');
+
+    const referencedAssets = [...html.matchAll(/(?:href|src)="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((path) => path.startsWith('/overlay/') || path === '/socket.io/socket.io.js');
+    for (const assetPath of referencedAssets) {
+      const response = await fetch(new URL(assetPath, baseUrl));
+      expect(response.status, `${assetPath} should be served`).toBe(200);
+      expect(response.headers.get('content-type'), `${assetPath} should have a JavaScript or CSS content type`)
+        .toMatch(/(?:javascript|text\/css)/);
+      const body = await response.text();
+      expect(body.length, `${assetPath} should not be empty`).toBeGreaterThan(0);
+      if (assetPath.endsWith('/style.css')) expect(body).toContain('background: transparent');
+      if (assetPath.endsWith('/animations.css')) expect(body).toContain('@keyframes rise');
+      if (assetPath.endsWith('/overlay.js')) expect(body).toContain("socket.on('curse:state'");
+    }
+    expect(referencedAssets).toEqual(expect.arrayContaining([
+      '/overlay/style.css', '/overlay/animations.css',
+      '/overlay/overlay.js', '/socket.io/socket.io.js'
+    ]));
+
+    const withoutSlash = await fetch(`${baseUrl}/overlay`, { redirect: 'manual' });
+    if ([301, 308].includes(withoutSlash.status)) {
+      const redirectTarget = new URL(withoutSlash.headers.get('location'), baseUrl);
+      expect(redirectTarget.pathname).toBe('/overlay/');
+      const redirectedPage = await fetch(redirectTarget);
+      expect(redirectedPage.status).toBe(200);
+      expect(await redirectedPage.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
+    } else {
+      expect(withoutSlash.status).toBe(200);
+      expect(withoutSlash.headers.get('content-type')).toContain('text/html');
+      expect(await withoutSlash.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
+    }
+
+    const missingAsset = await fetch(`${baseUrl}/overlay/missing-regression-asset.js`);
+    expect(missingAsset.status).toBe(404);
+    expect(await missingAsset.text()).not.toContain('StreamAlchemy — Gravity Curse Overlay');
+  });
+
+  it('keeps a real Socket.IO connection and sends the current initial state', async () => {
+    const effect = {
+      id: 'gravity', name: 'Gravity Curse',
+      startedAt: 1000, expiresAt: 31000, duration: 30000
+    };
+    server = createOverlayServer({
+      engine: makeEngine({ state: 'ACTIVE', activeEffect: effect }),
+      logger: mockLogger
+    });
+    const address = await server.listen(0, '127.0.0.1');
+    const client = createSocketClient(`http://127.0.0.1:${address.port}`, {
+      autoConnect: false,
+      reconnection: false,
+      timeout: 3000,
+      transports: ['websocket']
+    });
+
+    try {
+      const initialState = new Promise((resolve, reject) => {
+        client.once(OVERLAY_EVENTS.CURSE_STATE, resolve);
+        client.once('connect_error', reject);
+      });
+      client.connect();
+      expect(await initialState).toEqual({
+        state: 'active',
+        effect: {
+          id: 'gravity', name: 'Gravity Curse',
+          startedAt: 1000, expiresAt: 31000, duration: 30000
+        }
+      });
+      expect(client.connected).toBe(true);
+    } finally {
+      client.disconnect();
+    }
+  });
+
 });

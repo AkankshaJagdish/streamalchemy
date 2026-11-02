@@ -22,6 +22,8 @@ jobs:
         run: npm audit --json > npm-audit-report.json || true
       - name: Run automated tests
         run: npm test
+      - name: Run overlay HTTP and browser tests
+        run: npm run test:overlay
       - name: Check JavaScript syntax
         run: |
           find src tests public -type f -name '*.js' -print0 | xargs -0 -n1 node --check
