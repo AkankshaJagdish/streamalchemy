@@ -183,12 +183,12 @@ describe('overlay server', () => {
 
     const health = await fetch(`${baseUrl}/health`);
     expect(health.status).toBe(200);
-    expect(health.headers.get('content-type')).toMatch(/application\\/json/);
+    expect(health.headers.get('content-type')).toMatch(/application\/json/);
     expect(await health.json()).toEqual({ ok: true });
 
     const overlayResponse = await fetch(`${baseUrl}/overlay/`);
     expect(overlayResponse.status).toBe(200);
-    expect(overlayResponse.headers.get('content-type')).toMatch(/text\\/html/);
+    expect(overlayResponse.headers.get('content-type')).toMatch(/text\/html/);
     const html = await overlayResponse.text();
     expect(html).toContain('StreamAlchemy — Gravity Curse Overlay');
     expect(html).toContain('id="curse-countdown"');
@@ -203,7 +203,7 @@ describe('overlay server', () => {
       const response = await fetch(new URL(assetPath, baseUrl));
       expect(response.status, `${assetPath} should be served`).toBe(200);
       expect(response.headers.get('content-type'), `${assetPath} should have a JavaScript or CSS content type`)
-        .toMatch(/(?:javascript|text\\/css)/);
+        .toMatch(/(?:javascript|text\/css)/);
       const body = await response.text();
       expect(body.length, `${assetPath} should not be empty`).toBeGreaterThan(0);
       if (assetPath.endsWith('/style.css')) expect(body).toContain('background: transparent');
