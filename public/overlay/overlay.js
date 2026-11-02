@@ -14,13 +14,17 @@
   let connected = false;
   const STAGES = [0, 5000, 13000, 17000, 26000, 30000];
   const STAGE_NAMES = ['stage-1', 'stage-2', 'stage-3', 'stage-4', 'stage-5'];
-  function clearStages() { root.classList.remove(...STAGE_NAMES); }
+  let activeStage = 0;
+  function clearStages() { root.classList.remove(...STAGE_NAMES); activeStage = 0; }
   function syncStage(now = Date.now()) {
     if (!activeEffect) { clearStages(); return 0; }
     const elapsed = Math.max(0, now - activeEffect.startedAt);
     const stage = elapsed < STAGES[1] ? 1 : elapsed < STAGES[2] ? 2 : elapsed < STAGES[3] ? 3 : elapsed < STAGES[4] ? 4 : elapsed < STAGES[5] ? 5 : 0;
-    clearStages();
-    if (stage) root.classList.add(STAGE_NAMES[stage - 1]);
+    if (stage !== activeStage) {
+      clearStages();
+      if (stage) root.classList.add(STAGE_NAMES[stage - 1]);
+      activeStage = stage;
+    }
     return stage;
   }
 
