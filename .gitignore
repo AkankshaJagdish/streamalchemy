@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.mock.example
 node_modules/
 coverage/
 dist/
