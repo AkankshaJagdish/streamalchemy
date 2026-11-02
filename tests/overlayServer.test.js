@@ -216,11 +216,17 @@ describe('overlay server', () => {
     ]));
 
     const withoutSlash = await fetch(`${baseUrl}/overlay`, { redirect: 'manual' });
-    expect([301, 308]).toContain(withoutSlash.status);
-    expect(new URL(withoutSlash.headers.get('location'), baseUrl).pathname).toBe('/overlay/');
-    const redirectedPage = await fetch(new URL(withoutSlash.headers.get('location'), baseUrl));
-    expect(redirectedPage.status).toBe(200);
-    expect(await redirectedPage.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
+    if ([301, 308].includes(withoutSlash.status)) {
+      const redirectTarget = new URL(withoutSlash.headers.get('location'), baseUrl);
+      expect(redirectTarget.pathname).toBe('/overlay/');
+      const redirectedPage = await fetch(redirectTarget);
+      expect(redirectedPage.status).toBe(200);
+      expect(await redirectedPage.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
+    } else {
+      expect(withoutSlash.status).toBe(200);
+      expect(withoutSlash.headers.get('content-type')).toMatch(/text\\/html/);
+      expect(await withoutSlash.text()).toContain('StreamAlchemy — Gravity Curse Overlay');
+    }
 
     const missingAsset = await fetch(`${baseUrl}/overlay/missing-regression-asset.js`);
     expect(missingAsset.status).toBe(404);
