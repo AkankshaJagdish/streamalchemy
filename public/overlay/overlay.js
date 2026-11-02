@@ -35,6 +35,11 @@
     if (videoLayer) videoLayer.classList.remove('is-fallback');
     videoFailed = false;
   }
+  function failVideo(message) {
+    stopVideo();
+    videoFailed = true;
+    showVideoFallback(message);
+  }
   function startVideo(elapsedMs) {
     if (!videoLayer || videoElement || videoFailed) return;
     if (videoFallback) videoFallback.textContent = "YOU'VE BEEN RICKROLLED.";
@@ -52,9 +57,7 @@
       video.setAttribute('aria-label', 'Rickroll video');
       video.addEventListener('error', () => {
         if (videoElement !== video) return;
-        videoFailed = true;
-        stopVideo();
-        showVideoFallback('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
+        failVideo('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
       });
       video.addEventListener('loadedmetadata', () => {
         if (videoElement !== video) return;
@@ -73,15 +76,11 @@
       if (playResult && typeof playResult.catch === 'function') {
         playResult.catch(() => {
           if (videoElement !== video) return;
-          videoFailed = true;
-          stopVideo();
-          showVideoFallback('PLAYBACK BLOCKED — YOU STILL GOT RICKROLLED.');
+          failVideo('PLAYBACK BLOCKED — YOU STILL GOT RICKROLLED.');
         });
       }
     } catch {
-      videoFailed = true;
-      stopVideo();
-      showVideoFallback('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
+      failVideo('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
     }
   }
   function syncStage(now = Date.now()) {
