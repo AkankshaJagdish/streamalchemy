@@ -7,27 +7,97 @@
   const timerState = document.getElementById('timer-state');
   const progress = document.getElementById('timer-progress');
   const connection = document.getElementById('connection-state');
+  const videoLayer = document.getElementById('rickroll-video-layer');
+  const videoFallback = document.getElementById('rickroll-video-fallback');
   if (!root || !window.io) return;
 
   let intervalId = null;
   let activeEffect = null;
   let connected = false;
-  const STAGES = [0, 5000, 13000, 17000, 26000, 30000];
+  let videoElement = null;
+  let videoFailed = false;
   const STAGE_NAMES = ['stage-1', 'stage-2', 'stage-3', 'stage-4', 'stage-5'];
   let activeStage = 0;
+
   function clearStages() { root.classList.remove(...STAGE_NAMES); activeStage = 0; }
+  function showVideoFallback(message = "YOU'VE BEEN RICKROLLED.") {
+    if (!videoLayer) return;
+    videoLayer.classList.add('is-fallback');
+    if (videoFallback) videoFallback.textContent = message;
+  }
+  function stopVideo() {
+    if (videoElement) {
+      try { videoElement.pause(); } catch {}
+      videoElement.removeAttribute('src');
+      videoElement.remove();
+      videoElement = null;
+    }
+    if (videoLayer) videoLayer.classList.remove('is-fallback');
+    videoFailed = false;
+  }
+  function startVideo(elapsedMs) {
+    if (!videoLayer || videoElement || videoFailed) return;
+    if (videoFallback) videoFallback.textContent = "YOU'VE BEEN RICKROLLED.";
+    videoLayer.classList.add('is-fallback');
+    try {
+      const video = document.createElement('video');
+      videoElement = video;
+      video.src = '/overlay/assets/rickroll.mp4';
+      video.preload = 'auto';
+      video.autoplay = true;
+      video.loop = false;
+      video.muted = false;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('aria-label', 'Rickroll video');
+      video.addEventListener('error', () => {
+        if (videoElement !== video) return;
+        videoFailed = true;
+        stopVideo();
+        showVideoFallback('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
+      });
+      video.addEventListener('loadedmetadata', () => {
+        if (videoElement !== video) return;
+        try { video.currentTime = Math.max(0, Math.min(8.95, elapsedMs / 1000)); } catch {}
+      });
+      video.addEventListener('playing', () => {
+        if (videoElement === video && videoLayer) videoLayer.classList.remove('is-fallback');
+      });
+      video.addEventListener('ended', () => {
+        if (videoElement !== video) return;
+        video.pause();
+        showVideoFallback("YOU'VE BEEN RICKROLLED.");
+      });
+      videoLayer.append(video);
+      const playResult = video.play();
+      if (playResult && typeof playResult.catch === 'function') {
+        playResult.catch(() => {
+          if (videoElement !== video) return;
+          videoFailed = true;
+          stopVideo();
+          showVideoFallback('PLAYBACK BLOCKED — YOU STILL GOT RICKROLLED.');
+        });
+      }
+    } catch {
+      videoFailed = true;
+      stopVideo();
+      showVideoFallback('VIDEO UNAVAILABLE — YOU STILL GOT RICKROLLED.');
+    }
+  }
   function syncStage(now = Date.now()) {
-    if (!activeEffect) { clearStages(); return 0; }
+    if (!activeEffect) { clearStages(); stopVideo(); return 0; }
     const elapsed = Math.max(0, now - activeEffect.startedAt);
-    const stage = elapsed < STAGES[1] ? 1 : elapsed < STAGES[2] ? 2 : elapsed < STAGES[3] ? 3 : elapsed < STAGES[4] ? 4 : elapsed < STAGES[5] ? 5 : 0;
+    const stage = elapsed < 2000 ? 1 : elapsed < 4000 ? 2 : elapsed < 8000 ? 3 : elapsed < 17000 ? 4 : elapsed < 30000 ? 5 : 0;
     if (stage !== activeStage) {
+      const previousStage = activeStage;
       clearStages();
       if (stage) root.classList.add(STAGE_NAMES[stage - 1]);
       activeStage = stage;
+      if (stage === 4) startVideo(elapsed - 8000);
+      else if (previousStage === 4 || videoElement) stopVideo();
     }
     return stage;
   }
-
   function setConnection(isConnected) {
     connected = isConnected;
     connection.classList.toggle('is-connected', isConnected);
@@ -39,6 +109,7 @@
     if (intervalId !== null) window.clearInterval(intervalId);
     intervalId = null;
     activeEffect = null;
+    stopVideo();
     progress.style.transform = 'scaleX(0)';
   }
   function renderIdle(message = 'The world is in balance. For now.') {
@@ -76,10 +147,7 @@
     if (!isValidEffect(effect)) { renderIdle('Waiting for a valid curse signal.'); return false; }
     if (effect.expiresAt <= Date.now()) { renderIdle('The gravity field has faded.'); return false; }
     stopCountdown();
-    activeEffect = {
-      id: effect.id, name: effect.name, startedAt: effect.startedAt,
-      expiresAt: effect.expiresAt, duration: effect.duration
-    };
+    activeEffect = { id: effect.id, name: effect.name, startedAt: effect.startedAt, expiresAt: effect.expiresAt, duration: effect.duration };
     root.classList.remove('is-idle');
     root.classList.add('is-active');
     title.textContent = effect.name;
@@ -114,6 +182,7 @@
   setConnection(false);
   window.StreamAlchemyOverlay = Object.freeze({
     renderActive, renderIdle, renderCountdown, isValidEffect,
-    getState: () => ({ active: Boolean(activeEffect), expiresAt: activeEffect?.expiresAt ?? null, connected, stage: syncStage() })
+    getState: () => ({ active: Boolean(activeEffect), expiresAt: activeEffect?.expiresAt ?? null, connected, stage: syncStage() }),
+    getVideoState: () => ({ present: Boolean(videoElement), failed: videoFailed })
   });
 })();
