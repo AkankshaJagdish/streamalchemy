@@ -22,13 +22,18 @@ function makeElement() {
     textContent: '', style: {}, children: [], attributes: {},
     classList: makeClassList(),
     setAttribute(key, value) { this.attributes[key] = value; },
+    removeAttribute(key) { delete this.attributes[key]; },
+    addEventListener(name, callback) { this.listeners ??= {}; this.listeners[name] = callback; },
+    remove() { this.removed = true; },
+    pause() { this.paused = true; },
+    play() { this.playCalls = (this.playCalls || 0) + 1; return Promise.resolve(); },
     replaceChildren(...children) { this.children = children; },
     append(child) { this.children.push(child); }
   };
 }
 function createHarness() {
   const ids = ['streamalchemy-overlay', 'curse-title', 'curse-subtitle', 'curse-status',
-    'curse-countdown', 'timer-state', 'timer-progress', 'connection-state'];
+    'curse-countdown', 'timer-state', 'timer-progress', 'connection-state', 'rickroll-video-layer', 'rickroll-video-fallback'];
   const elements = Object.fromEntries(ids.map((id) => [id, makeElement()]));
   const handlers = new Map();
   const socket = { on: vi.fn((name, callback) => handlers.set(name, callback)) };
@@ -41,7 +46,7 @@ function createHarness() {
   };
   const document = {
     getElementById: (id) => elements[id],
-    createElement: (tag) => makeElement(tag),
+    createElement: (tag) => Object.assign(makeElement(tag), { tagName: tag }),
     createTextNode: (text) => ({ textContent: String(text) }),
     addEventListener: vi.fn(),
     hidden: false
@@ -102,10 +107,10 @@ describe('OBS browser overlay', () => {
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(5);
   });
   it('joins midway through a curse at the correct stage without restarting timing', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(15_000);
+    vi.spyOn(Date, 'now').mockReturnValue(10_000);
     const ui = createHarness();
     ui.fire('curse:state', { state: 'active', effect: effect() });
-    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
     expect(ui.elements['curse-countdown'].children[0].textContent).toBe('16');
   });
   it('ends the four-second obstruction at the 17-second boundary even after a delayed tick', () => {
@@ -114,7 +119,7 @@ describe('OBS browser overlay', () => {
     const ui = createHarness();
     ui.fire('curse:activated', effect());
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(3);
-    now = 18_001;
+    now = 8_001;
     ui.tick();
     expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
   });
@@ -130,6 +135,36 @@ describe('OBS browser overlay', () => {
     expect(ui.elements['streamalchemy-overlay'].classList.contains('is-idle')).toBe(true);
     expect(ui.elements['streamalchemy-overlay'].classList.contains('is-active')).toBe(false);
     expect(ui.intervals.size).toBe(0);
+  });
+  it('uses the complete nine-second video stage and cleans up at its end', () => {
+    let now = 9_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const ui = createHarness();
+    ui.fire('curse:activated', effect());
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(4);
+    expect(ui.window.StreamAlchemyOverlay.getVideoState().present).toBe(true);
+    now = 17_000;
+    ui.tick();
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(5);
+    expect(ui.window.StreamAlchemyOverlay.getVideoState().present).toBe(false);
+  });
+  it('does not replay video when joining after its stage has ended', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(18_000);
+    const ui = createHarness();
+    ui.fire('curse:state', { state: 'active', effect: effect() });
+    expect(ui.window.StreamAlchemyOverlay.getState().stage).toBe(5);
+    expect(ui.window.StreamAlchemyOverlay.getVideoState().present).toBe(false);
+  });
+  it('falls back visibly when video playback is rejected', async () => {
+    const ui = createHarness();
+    ui.fire('curse:activated', effect());
+    const video = ui.elements['rickroll-video-layer'].children[0];
+    video.play = () => Promise.reject(new Error('autoplay blocked'));
+    vi.spyOn(Date, 'now').mockReturnValue(9_000);
+    ui.tick();
+    await Promise.resolve();
+    expect(ui.window.StreamAlchemyOverlay.getVideoState().failed).toBe(true);
+    expect(ui.elements['rickroll-video-layer'].classList.contains('is-fallback')).toBe(true);
   });
   it('calculates remaining time from the original expiresAt timestamp', () => {
     vi.spyOn(Date, 'now').mockReturnValue(11_001);
