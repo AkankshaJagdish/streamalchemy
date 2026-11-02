@@ -91,16 +91,16 @@ Approve the consent screen and copy the User Access Token into `TWITCH_USER_ACCE
 | `user:read:chat` | Read channel chat using the broadcaster-installed chatbot identity |
 | `channel:read:redemptions` | Receive custom Channel Points redemption events |
 
-The MVP intentionally does **not** request `channel:manage:redemptions`. The Gravity Curse still activates on a valid redemption, but StreamAlchemy does not automatically mark that redemption as fulfilled. This is a documented limitation rather than an implicit promise.
+When `TWITCH_CHANNEL_POINTS_ENABLED=false`, only `user:read:chat` is required and the Channel Points subscription is not registered. The redemption handler and Channel Points integration remain in the codebase and are enabled by default. The MVP intentionally does **not** request `channel:manage:redemptions`. When Channel Points are enabled, the Gravity Curse still activates on a valid redemption, but StreamAlchemy does not automatically mark that redemption as fulfilled. This is a documented limitation rather than an implicit promise.
 
 ## EventSub configuration
 
 No manual EventSub subscription creation is required. On startup, StreamAlchemy:
 
-1. Validates the User Access Token.
+1. Validates the User Access Token against the scopes required by the enabled triggers.
 2. Opens the Twitch EventSub WebSocket.
 3. Receives the welcome session ID.
-4. Registers `channel.chat.message` and `channel.channel_points_custom_reward_redemption.add` against that session.
+4. Registers `channel.chat.message` and, when `TWITCH_CHANNEL_POINTS_ENABLED=true`, `channel.channel_points_custom_reward_redemption.add` against that session.
 5. Handles keepalives, Twitch reconnect handover, unexpected socket closure, fresh WebSocket sessions and subscription re-registration.
 
 Chat subscription conditions use the broadcaster identity for both broadcaster and chat-reader user IDs in the MVP configuration. If Twitch revokes a subscription or the token becomes invalid, inspect the sanitized console logs and re-authorize/restart as needed.
@@ -132,9 +132,11 @@ Copy `.env.example` to `.env` and provide:
 | `TWITCH_BROADCASTER_USER_ID` | Yes | Numeric Twitch user ID owning the channel and authorizing the token |
 | `TWITCH_BROADCASTER_LOGIN` | Yes | Twitch login for the same broadcaster |
 | `TWITCH_BOT_USER_ID` | No | Defaults to broadcaster ID; MVP validation requires equality |
-| `TWITCH_GRAVITY_REWARD_ID` | Recommended | Exact custom reward ID for Gravity Curse redemptions |
+| `TWITCH_GRAVITY_REWARD_ID` | Recommended when Channel Points are enabled | Exact custom reward ID for Gravity Curse redemptions |
+| `TWITCH_CHANNEL_POINTS_ENABLED` | No | Defaults to `true`; set to `false` for a real chat-only demo that does not require Channel Points eligibility or redemption scope |
 | `TWITCH_USER_ACCESS_TOKEN` | Yes | Broadcaster User Access Token with the required scopes |
 | `TWITCH_ENABLED` | No | Defaults to enabled; set to `false` to run the overlay server without Twitch |
+| `TWITCH_CHANNEL_POINTS_ENABLED` | No | Defaults to `true`; set to `false` for chat-only live testing without Channel Points scope or subscription |
 | `PORT` | No | HTTP port; defaults to `3000` |
 | `HOST` | No | Bind interface; defaults to `0.0.0.0` |
 | `OVERLAY_ALLOWED_ORIGINS` | No | Comma-separated Socket.IO browser origins; defaults include localhost ports 3000 and 5173 |
@@ -147,7 +149,7 @@ The application loads `.env` at startup through dotenv. Keep `.env` local; `.git
 npm start
 ```
 
-The server starts the HTTP/Socket.IO overlay service and, unless `TWITCH_ENABLED=false`, validates Twitch authentication and connects EventSub. The health endpoint is `GET /health`. Stop with Ctrl+C; the application closes EventSub, clears engine timers and closes Socket.IO.
+The server starts the HTTP/Socket.IO overlay service and, unless `TWITCH_ENABLED=false`, validates Twitch authentication and connects EventSub. Channel Points are enabled by default. For a chat-only live demo on a channel without Channel Points eligibility, set `TWITCH_CHANNEL_POINTS_ENABLED=false`; StreamAlchemy then validates only `user:read:chat` and registers only `channel.chat.message`. The health endpoint is `GET /health`. Stop with Ctrl+C; the application closes EventSub, clears engine timers and closes Socket.IO.
 
 For local overlay-only development without Twitch credentials:
 
@@ -263,7 +265,7 @@ Stop StreamAlchemy with Ctrl+C in Terminal 2, then stop the Twitch CLI mock serv
 cp .env.example .env
 ```
 
-Set `TWITCH_EVENTSUB_MODE=production` (or omit it, since production is the default), provide the required production Twitch configuration and a real Gravity Curse reward ID, and remove the mock URL setting. Do not deploy with mock mode enabled. Production mode retains Twitch token validation, the existing authorization scopes, subscription registration, and the production EventSub URL.
+Set `TWITCH_EVENTSUB_MODE=production` (or omit it, since production is the default), provide the required production Twitch configuration and a real Gravity Curse reward ID, and remove the mock URL setting. Do not deploy with mock mode enabled. Production mode retains Twitch token validation and the production EventSub URL. Channel Points remain enabled by default; set `TWITCH_CHANNEL_POINTS_ENABLED=false` to validate and register chat only.
 
 **Important:** this is a simulated EventSub notification test only. It does not test a real Channel Points redemption, does not create a reward on Twitch, and does not establish eligibility for Channel Points. A real redemption still requires a channel eligible for Channel Points (Affiliate or Partner) and a separately completed live Twitch/OBS acceptance test.
 
