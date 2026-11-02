@@ -44,7 +44,7 @@ export function createEventSubClient({
     let parsedUrl;
     try { parsedUrl = new URL(eventSubUrl); }
     catch { throw new TypeError('Mock EventSub URL must be a local loopback WebSocket URL'); }
-    const hostname = parsedUrl.hostname.toLowerCase().replace(/^\\[|\\]$/g, '');
+    const hostname = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '');
     if (parsedUrl.protocol !== 'ws:' || !['localhost', '127.0.0.1', '::1'].includes(hostname)
       || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
       throw new TypeError('Mock EventSub URL must use ws:// and a loopback host');
