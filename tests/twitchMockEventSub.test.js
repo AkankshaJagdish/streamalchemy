@@ -51,7 +51,7 @@ class MockHttpServer extends EventEmitter {
 }
 
 const logger = () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
-const tick = async () => { await Promise.resolve(); await Promise.resolve(); await new Promise((resolve) => setImmediate(resolve)); };
+const tick = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 const welcome = (id = 'mock-session') => ({
   metadata: { message_type: 'session_welcome' },
   payload: { session: { id, status: 'connected', keepalive_timeout_seconds: 30, reconnect_url: null } }
