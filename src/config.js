@@ -46,7 +46,9 @@ export function loadConfig(env = process.env) {
 
   const broadcasterUserId = String(env.TWITCH_BROADCASTER_USER_ID).trim();
   const broadcasterLogin = String(env.TWITCH_BROADCASTER_LOGIN ?? '').trim().toLowerCase();
-  const botUserId = String(env.TWITCH_BOT_USER_ID ?? broadcasterUserId).trim();
+  const botUserId = eventSubMode === 'mock'
+    ? broadcasterUserId
+    : String(env.TWITCH_BOT_USER_ID ?? broadcasterUserId).trim();
   const gravityRewardId = String(env.TWITCH_GRAVITY_REWARD_ID ?? '').trim();
 
   if (!/^\d+$/.test(broadcasterUserId)) {
@@ -69,12 +71,12 @@ export function loadConfig(env = process.env) {
   return Object.freeze({
     twitch: Object.freeze({
       eventSubMode,
-      clientId: String(env.TWITCH_CLIENT_ID ?? '').trim(),
-      clientSecret: String(env.TWITCH_CLIENT_SECRET ?? '').trim(),
+      clientId: eventSubMode === 'mock' ? '' : String(env.TWITCH_CLIENT_ID ?? '').trim(),
+      clientSecret: eventSubMode === 'mock' ? '' : String(env.TWITCH_CLIENT_SECRET ?? '').trim(),
       broadcasterUserId,
       broadcasterLogin,
       botUserId,
-      accessToken: String(env.TWITCH_USER_ACCESS_TOKEN ?? '').trim(),
+      accessToken: eventSubMode === 'mock' ? '' : String(env.TWITCH_USER_ACCESS_TOKEN ?? '').trim(),
       gravityRewardId,
       eventSubUrl,
       apiBaseUrl: 'https://api.twitch.tv/helix',
