@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { createEventSubSubscription } from './api.js';
 import { buildEventSubSubscriptions, EVENTSUB_TYPES } from './eventsubSubscriptions.js';
 import { createLogger } from '../utils/logger.js';
+import { DEFAULT_MOCK_EVENTSUB_URL } from '../config.js';
 
 const DEFAULT_EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 
@@ -37,6 +38,17 @@ export function createEventSubClient({
   const mockMode = config?.eventSubMode === 'mock';
   if (!config?.broadcasterUserId || (!mockMode && (!config?.clientId || !config?.accessToken))) {
     throw new TypeError('EventSub client requires validated Twitch configuration');
+  }
+  const eventSubUrl = config.eventSubUrl ?? (mockMode ? DEFAULT_MOCK_EVENTSUB_URL : DEFAULT_EVENTSUB_URL);
+  if (mockMode) {
+    let parsedUrl;
+    try { parsedUrl = new URL(eventSubUrl); }
+    catch { throw new TypeError('Mock EventSub URL must be a local loopback WebSocket URL'); }
+    const hostname = parsedUrl.hostname.toLowerCase().replace(/^\\[|\\]$/g, '');
+    if (parsedUrl.protocol !== 'ws:' || !['localhost', '127.0.0.1', '::1'].includes(hostname)
+      || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
+      throw new TypeError('Mock EventSub URL must use ws:// and a loopback host');
+    }
   }
 
   let activeSocket = null;
@@ -121,7 +133,7 @@ export function createEventSubClient({
     if (stopped || reconnectTimer || handoverSocket) return;
     reconnectTimer = setTimer(() => {
       reconnectTimer = null;
-      connect(config.eventSubUrl ?? DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
+      connect(eventSubUrl, { handover: false }).catch((error) => {
         logger.error('EventSub reconnect failed', { message: error.message });
         scheduleFreshConnection();
       });
@@ -316,7 +328,7 @@ export function createEventSubClient({
         startResolve = resolve;
         startReject = reject;
       });
-      connect(config.eventSubUrl ?? DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
+      connect(eventSubUrl, { handover: false }).catch((error) => {
         settleStart(error);
       });
       return startPromise;
