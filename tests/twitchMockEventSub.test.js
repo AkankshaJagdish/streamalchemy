@@ -106,6 +106,20 @@ describe('local Twitch CLI mock EventSub mode', () => {
     });
   });
 
+  it('discards unused production credentials and bot settings in mock configuration', () => {
+    expect(loadConfig(mockEnv({
+      TWITCH_CLIENT_ID: 'should-not-be-retained',
+      TWITCH_CLIENT_SECRET: 'should-not-be-retained',
+      TWITCH_USER_ACCESS_TOKEN: 'should-not-be-retained',
+      TWITCH_BOT_USER_ID: 'not-needed-in-mock'
+    })).twitch).toMatchObject({
+      clientId: '',
+      clientSecret: '',
+      accessToken: '',
+      botUserId: BROADCASTER_ID
+    });
+  });
+
   it('uses a configured local WebSocket URL and rejects non-loopback URLs', () => {
     expect(loadConfig(mockEnv({
       TWITCH_EVENTSUB_WS_URL: 'ws://localhost:9090/ws'
