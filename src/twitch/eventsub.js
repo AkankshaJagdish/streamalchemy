@@ -34,7 +34,8 @@ export function createEventSubClient({
   setTimer = setTimeout,
   clearTimer = clearTimeout
 }) {
-  if (!config?.clientId || !config?.accessToken || !config?.broadcasterUserId) {
+  const mockMode = config?.eventSubMode === 'mock';
+  if (!config?.broadcasterUserId || (!mockMode && (!config?.clientId || !config?.accessToken))) {
     throw new TypeError('EventSub client requires validated Twitch configuration');
   }
 
@@ -120,7 +121,7 @@ export function createEventSubClient({
     if (stopped || reconnectTimer || handoverSocket) return;
     reconnectTimer = setTimer(() => {
       reconnectTimer = null;
-      connect(DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
+      connect(config.eventSubUrl ?? DEFAULT_EVENTSUB_URL, { handover: false }).catch((error) => {
         logger.error('EventSub reconnect failed', { message: error.message });
         scheduleFreshConnection();
       });
@@ -185,7 +186,7 @@ export function createEventSubClient({
               activeSessionId = session.id;
               keepaliveTimeoutSeconds = session.keepalive_timeout_seconds;
               resetKeepalive(keepaliveTimeoutSeconds, socket);
-              await registerSubscriptions(session.id);
+              if (!mockMode) await registerSubscriptions(session.id);
             }
             onStatus({ state: 'welcomed', sessionId: session.id, handover });
             resolve({ sessionId: session.id });
@@ -206,6 +207,10 @@ export function createEventSubClient({
         }
 
         if (messageType === 'session_reconnect') {
+          if (mockMode) {
+            logger.warn('Ignoring EventSub reconnect handover in local mock mode');
+            return;
+          }
           const reconnectUrl = message.payload?.session?.reconnect_url;
           if (typeof reconnectUrl !== 'string' || !reconnectUrl.startsWith('wss://')) {
             logger.error('EventSub reconnect message contained an invalid URL');
@@ -248,7 +253,7 @@ export function createEventSubClient({
             status: subscription?.status
           });
           onRevocation(subscription, message);
-          if (socket === activeSocket && subscription?.type && activeSessionId
+          if (!mockMode && socket === activeSocket && subscription?.type && activeSessionId
             && !recoveryInFlight.has(subscription.type)) {
             const replacement = buildEventSubSubscriptions({
               broadcasterUserId: config.broadcasterUserId,
