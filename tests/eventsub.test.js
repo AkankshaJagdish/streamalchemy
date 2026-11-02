@@ -300,3 +300,119 @@ describe('EventSub WebSocket client', () => {
     client.stop();
   });
 });
+
+
+describe('EventSub keepalive grace period', () => {
+  async function startClient(overrides = {}) {
+    MockSocket.instances = [];
+    const client = createEventSubClient({
+      config: { clientId: 'client', accessToken: 'token', broadcasterUserId: '100' },
+      fetchImpl: vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({}) }),
+      WebSocketImpl: MockSocket,
+      ...overrides
+    });
+    const started = client.start();
+    const socket = MockSocket.instances[0];
+    socket.sendFrame(welcome('s-keepalive'));
+    await started;
+    return { client, socket };
+  }
+
+  it('does not close at the exact negotiated keepalive timeout, but closes after the 5-second grace period', async () => {
+    vi.useFakeTimers();
+    try {
+      const { client, socket } = await startClient();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(socket.readyState).toBe(MockSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(socket.readyState).toBe(MockSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(socket.readyState).toBe(MockSocket.CLOSED);
+      client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resets the grace timer when a keepalive arrives at the timeout boundary', async () => {
+    vi.useFakeTimers();
+    try {
+      const { client, socket } = await startClient();
+      await vi.advanceTimersByTimeAsync(30_000);
+      socket.sendFrame(keepalive());
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(socket.readyState).toBe(MockSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(socket.readyState).toBe(MockSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(socket.readyState).toBe(MockSocket.CLOSED);
+      client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resets the grace timer when a notification arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const { client, socket } = await startClient();
+      await vi.advanceTimersByTimeAsync(30_000);
+      socket.sendFrame({
+        metadata: { message_type: 'notification', subscription_type: 'channel.chat.message' },
+        payload: { event: {} }
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(socket.readyState).toBe(MockSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(socket.readyState).toBe(MockSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(socket.readyState).toBe(MockSocket.CLOSED);
+      client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('prevents a stale timer from closing a replacement socket after Twitch handover', async () => {
+    const timers = [];
+    const clearTimer = vi.fn();
+    const { client, socket: oldSocket } = await startClient({
+      setTimer: (fn, delay) => {
+        const handle = { fn, delay };
+        timers.push(handle);
+        return handle;
+      },
+      clearTimer
+    });
+    const staleTimer = timers[0];
+    oldSocket.sendFrame({
+      metadata: { message_type: 'session_reconnect' },
+      payload: { session: { reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?handover=keep' } }
+    });
+    const replacement = MockSocket.instances[1];
+    replacement.sendFrame(welcome('s-replacement'));
+    await tick();
+    expect(oldSocket.readyState).toBe(MockSocket.CLOSED);
+    staleTimer.fn();
+    expect(replacement.readyState).toBe(MockSocket.OPEN);
+    client.stop();
+  });
+
+  it('cancels the pending keepalive timer when stopped', async () => {
+    const timers = [];
+    const clearTimer = vi.fn();
+    const { client, socket } = await startClient({
+      setTimer: (fn, delay) => {
+        const handle = { fn, delay };
+        timers.push(handle);
+        return handle;
+      },
+      clearTimer
+    });
+    const pendingTimer = timers[0];
+    client.stop();
+    expect(clearTimer).toHaveBeenCalledWith(pendingTimer);
+    pendingTimer.fn();
+    expect(socket.readyState).toBe(MockSocket.CLOSED);
+  });
+});
