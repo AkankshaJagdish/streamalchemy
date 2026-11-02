@@ -86,6 +86,21 @@ describe('validateConfiguredTwitchAuth', () => {
     })).rejects.toThrow(/TWITCH_BOT_USER_ID to equal TWITCH_BROADCASTER_USER_ID/);
   });
 
+  it('accepts a chat-only broadcaster token when Channel Points are disabled', async () => {
+    const chatOnlyToken = { ...validToken, scopes: ['user:read:chat'] };
+    await expect(validateConfiguredTwitchAuth({
+      config: {
+        accessToken: 't',
+        clientId: 'client-123',
+        broadcasterUserId: '100',
+        broadcasterLogin: 'broadcaster',
+        botUserId: '100',
+        channelPointsEnabled: false
+      },
+      fetchImpl: vi.fn().mockResolvedValue(fetchResponse(chatOnlyToken))
+    })).resolves.toMatchObject({ userId: '100', scopes: ['user:read:chat'] });
+  });
+
   it('validates broadcaster token with minimum Stage 1 scopes', async () => {
     await expect(validateConfiguredTwitchAuth({
       config: {
