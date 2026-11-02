@@ -147,7 +147,7 @@ describe('OBS browser overlay', () => {
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     const ui = createHarness();
     ui.fire('curse:activated', effect());
-    const video = ui.elements['rickroll-video-layer'].children[0];
+    const video = ui.elements['rickroll-video-layer'].children.find((child) => child.tagName === 'video');
     expect(video.tagName).toBe('video');
     expect(video.src).toBe('/overlay/assets/rickroll.mp4');
     expect(video.loop).toBe(false);
