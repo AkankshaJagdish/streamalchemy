@@ -44,6 +44,12 @@ export function loadConfig(env = process.env) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
+  const channelPointsSetting = String(env.TWITCH_CHANNEL_POINTS_ENABLED ?? 'true').trim().toLowerCase();
+  if (!['true', 'false'].includes(channelPointsSetting)) {
+    throw new Error('TWITCH_CHANNEL_POINTS_ENABLED must be either true or false');
+  }
+  const channelPointsEnabled = channelPointsSetting === 'true';
+
   const broadcasterUserId = String(env.TWITCH_BROADCASTER_USER_ID).trim();
   const broadcasterLogin = String(env.TWITCH_BROADCASTER_LOGIN ?? '').trim().toLowerCase();
   const botUserId = eventSubMode === 'mock'
@@ -78,12 +84,15 @@ export function loadConfig(env = process.env) {
       botUserId,
       accessToken: eventSubMode === 'mock' ? '' : String(env.TWITCH_USER_ACCESS_TOKEN ?? '').trim(),
       gravityRewardId,
+      channelPointsEnabled,
       eventSubUrl,
       apiBaseUrl: 'https://api.twitch.tv/helix',
       tokenValidationUrl: 'https://id.twitch.tv/oauth2/validate'
     })
   });
 }
+
+export const CHAT_ONLY_TWITCH_SCOPES = Object.freeze(['user:read:chat']);
 
 export const REQUIRED_TWITCH_SCOPES = Object.freeze([
   'user:read:chat',
