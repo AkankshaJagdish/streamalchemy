@@ -324,6 +324,7 @@ describe('local Twitch CLI mock EventSub mode', () => {
       engine: createCurseEngine(), logger: logger(),
       setIntervalImpl: vi.fn(() => 1), clearIntervalImpl: vi.fn()
     });
+    await vi.waitFor(() => expect(MockSocket.instances).toHaveLength(1));
     const socket = MockSocket.instances[0];
     expect(socket.url).toBe('wss://eventsub.wss.twitch.tv/ws');
     socket.sendFrame(welcome('production-session'));
